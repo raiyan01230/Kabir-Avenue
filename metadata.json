@@ -1,0 +1,6 @@
+{
+  "name": "Hyperdrive E-Commerce",
+  "description": "A professional e-commerce platform for Bangladesh.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
