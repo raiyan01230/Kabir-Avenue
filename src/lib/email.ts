@@ -1,4 +1,26 @@
 import { Resend } from 'resend';
+import { createClient } from '@supabase/supabase-js';
+
+async function fetchStoreSettingsFromDB() {
+  try {
+    const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL;
+    const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.VITE_SUPABASE_ANON_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+    if (!url || !key) return null;
+    
+    const sb = createClient(url, key);
+    const { data, error } = await sb.from('store_settings').select('setting_key, setting_value');
+    if (error || !data) return null;
+    
+    const map: Record<string, string> = {};
+    data.forEach(row => {
+      map[row.setting_key] = row.setting_value;
+    });
+    return map;
+  } catch (e) {
+    console.warn('Could not fetch store settings for email', e);
+    return null;
+  }
+}
 
 let resendClient: Resend | null = null;
 
@@ -56,11 +78,15 @@ export async function sendAccountConfirmationEmail(customer: {
   try {
     const from = getFromAddress();
     const cleanEmail = customer.email.trim();
+    
+    const dbSettings = await fetchStoreSettingsFromDB();
+    const storeName = dbSettings?.['store_name'] || 'HYPERDRIVE';
+    const storeWebsite = process.env.APP_URL || 'https://hyperdrive.bd';
 
     const res = await client.emails.send({
       from,
       to: cleanEmail,
-      subject: `Your HYPERDRIVE Account Has Been Created Successfully!`,
+      subject: `Your ${storeName} Account Has Been Created Successfully!`,
       html: `
         <!DOCTYPE html>
         <html>
@@ -84,14 +110,14 @@ export async function sendAccountConfirmationEmail(customer: {
         <body>
           <div class="container">
             <div class="header">
-              <h1>HYPERDRIVE</h1>
+              <h1>${storeName}</h1>
               <p>Authentic Enthusiast Hardware &bull; Bangladesh</p>
             </div>
             <div class="content">
               <div class="badge">&#10003; Account Active &amp; Verified</div>
               <p class="welcome-text">Hello <strong>${customer.fullName}</strong>,</p>
               <p class="welcome-text">
-                Welcome to HYPERDRIVE! Your account is active. You can now browse our catalog, save items to your wishlist, track orders live, and checkout with fast dispatch across Bangladesh.
+                Welcome to ${storeName}! Your account is active. You can now browse our catalog, save items to your wishlist, track orders live, and checkout with fast dispatch across Bangladesh.
               </p>
               
               <div class="details-card">
@@ -114,7 +140,7 @@ export async function sendAccountConfirmationEmail(customer: {
               </div>
 
               <div class="button-wrapper">
-                <a href="${process.env.APP_URL || 'https://hyperdrive.bd'}" class="btn">Explore Hardware Catalog</a>
+                <a href="${storeWebsite}" class="btn">Explore Hardware Catalog</a>
               </div>
 
               <p style="font-size: 13px; color: #64748b; text-align: center; margin-top: 24px;">
@@ -122,7 +148,7 @@ export async function sendAccountConfirmationEmail(customer: {
               </p>
             </div>
             <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} HYPERDRIVE Bangladesh. Official Warranty Guaranteed.</p>
+              <p>&copy; ${new Date().getFullYear()} ${storeName} Bangladesh. Official Warranty Guaranteed.</p>
             </div>
           </div>
         </body>
@@ -143,6 +169,8 @@ export async function sendAccountConfirmationEmail(customer: {
   }
 }
 
+import { renderOrderReceiptEmail, OrderReceiptData } from '../templates/OrderReceiptEmail';
+
 export async function sendOrderConfirmation(orderData: any, customerEmail: string) {
   if (!isValidEmail(customerEmail)) {
     console.log(`[Email Service] Skipping external dispatch for dummy/guest placeholder: ${customerEmail}`);
@@ -160,143 +188,63 @@ export async function sendOrderConfirmation(orderData: any, customerEmail: strin
   try {
     const items = orderData.items || [];
     const shipping = orderData.shipping_info || {};
+    
+    const dbSettings = await fetchStoreSettingsFromDB();
 
-    const itemsRows = items.map((item: any) => {
-      const name = item.product?.name || item.name || item.product_name_snapshot || 'Product Item';
-      const price = Number(item.unitPrice || item.price || 0);
-      const qty = item.quantity || 1;
-      const total = price * qty;
-      return `
-        <tr>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #0f172a;">
-            <strong>${name}</strong>
-          </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #64748b; text-align: center;">
-            ${qty}
-          </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #0f172a; text-align: right; font-weight: 600;">
-            ৳${price.toLocaleString()}
-          </td>
-          <td style="padding: 10px 0; border-bottom: 1px solid #f1f5f9; font-size: 14px; color: #0f172a; text-align: right; font-weight: 700;">
-            ৳${total.toLocaleString()}
-          </td>
-        </tr>
-      `;
-    }).join('');
+    const receiptData: OrderReceiptData = {
+      order: {
+        id: orderData.id || orderNumber,
+        orderNumber: orderNumber,
+        createdAt: orderData.created_at || new Date().toISOString(),
+        status: orderData.status || 'Pending',
+        paymentMethod: orderData.payment_method || 'Cash on Delivery',
+        subtotal: Number(orderData.subtotal || 0),
+        discount: Number(orderData.discount || 0),
+        shipping: Number(orderData.shipping_fee || 70),
+        tax: 0,
+        total: Number(orderData.total || 0),
+        currency: 'BDT'
+      },
+      customer: {
+        name: shipping.full_name || 'Customer',
+        email: customerEmail,
+        phone: shipping.phone || ''
+      },
+      shippingAddress: {
+        division: shipping.division || '',
+        district: shipping.district || '',
+        thana: shipping.thana || '',
+        deliveryArea: shipping.delivery_area || '',
+        address: shipping.full_address || '',
+        note: orderData.order_note
+      },
+      items: items.map((item: any) => ({
+        productId: item.product_id || '',
+        name: item.product?.name || item.name || item.product_name_snapshot || 'Product Item',
+        quantity: item.quantity || 1,
+        unitPrice: Number(item.unitPrice || item.price || 0),
+        lineTotal: Number(item.unitPrice || item.price || 0) * (item.quantity || 1)
+      })),
+      store: {
+        name: dbSettings?.['store_name'] || orderData.store_name || 'HYPERDRIVE',
+        email: dbSettings?.['contact_email'] || dbSettings?.['support_email'] || orderData.store_email || 'support@hyperdrive.bd',
+        phone: dbSettings?.['store_phone'] || dbSettings?.['contact_phone'] || orderData.store_phone || '+8801XXXXXXXXX',
+        address: dbSettings?.['store_address'] || dbSettings?.['contact_address'] || orderData.store_address || 'Dhaka, Bangladesh',
+        websiteUrl: process.env.APP_URL || 'https://hyperdrive.bd'
+      }
+    };
 
-    const trackingUrl = `${process.env.APP_URL || 'https://hyperdrive.bd'}/track/${orderNumber}`;
+    const { subject, html, text } = renderOrderReceiptEmail(receiptData);
+
     const from = getFromAddress();
     const cleanEmail = customerEmail.trim();
 
     const res = await client.emails.send({
       from,
       to: cleanEmail,
-      subject: `Invoice & Order Confirmation - #${orderNumber}`,
-      html: `
-        <!DOCTYPE html>
-        <html>
-        <head>
-          <meta charset="utf-8">
-          <style>
-            body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background-color: #f8fafc; color: #1e293b; margin: 0; padding: 20px; }
-            .container { max-width: 650px; margin: 0 auto; background: #ffffff; border-radius: 12px; overflow: hidden; border: 1px solid #e2e8f0; }
-            .header { background: #0f172a; color: #ffffff; padding: 32px 24px; text-align: center; }
-            .header h1 { margin: 0; font-size: 26px; font-weight: 900; letter-spacing: -0.02em; }
-            .header p { margin: 4px 0 0 0; font-size: 13px; color: #94a3b8; }
-            .content { padding: 32px 24px; }
-            .badge { background: #f0fdf4; color: #15803d; border: 1px solid #bbf7d0; font-weight: 700; font-size: 12px; padding: 6px 14px; border-radius: 9999px; display: inline-block; margin-bottom: 16px; }
-            .card { background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 10px; padding: 18px; margin-bottom: 24px; }
-            .btn { background: #0f172a; color: #ffffff !important; padding: 14px 28px; border-radius: 8px; text-decoration: none; font-weight: 700; font-size: 14px; display: inline-block; }
-            .footer { background: #f8fafc; padding: 24px; text-align: center; font-size: 12px; color: #64748b; border-top: 1px solid #e2e8f0; }
-          </style>
-        </head>
-        <body>
-          <div class="container">
-            <div class="header">
-              <h1>HYPERDRIVE</h1>
-              <p>Official Invoice &amp; Dispatch Order #${orderNumber}</p>
-            </div>
-
-            <div class="content">
-              <div class="badge">&#10003; Order Confirmed &amp; In Queue</div>
-
-              <p style="font-size: 15px; color: #334155; line-height: 1.6; margin-top: 0;">
-                Thank you for your order with <strong>HYPERDRIVE Bangladesh</strong>! We have received your order details and are preparing package inspection and dispatch.
-              </p>
-
-              <!-- Delivery Address Summary -->
-              ${shipping.full_name ? `
-              <div class="card">
-                <div style="font-weight: 800; font-size: 12px; text-transform: uppercase; color: #0f172a; margin-bottom: 10px; letter-spacing: 0.05em;">
-                  Delivery Information
-                </div>
-                <div style="font-size: 14px; color: #334155; line-height: 1.5;">
-                  <strong>Recipient:</strong> ${shipping.full_name} (${shipping.phone || 'N/A'})<br/>
-                  <strong>Address:</strong> ${shipping.full_address || ''}, ${shipping.thana || ''}, ${shipping.district || ''}, ${shipping.division || ''}<br/>
-                  <strong>Delivery Zone:</strong> ${shipping.delivery_area || 'Standard Bangladesh Delivery'}
-                </div>
-              </div>` : ''}
-
-              <!-- Item Snapshot Table -->
-              <div style="margin-bottom: 24px;">
-                <div style="font-weight: 800; font-size: 12px; text-transform: uppercase; color: #0f172a; margin-bottom: 12px; letter-spacing: 0.05em;">
-                  Order Items Breakdown
-                </div>
-                <table style="width: 100%; border-collapse: collapse;">
-                  <thead>
-                    <tr style="border-bottom: 2px solid #e2e8f0; font-size: 12px; color: #64748b; text-transform: uppercase;">
-                      <th style="text-align: left; padding-bottom: 8px;">Item</th>
-                      <th style="text-align: center; padding-bottom: 8px;">Qty</th>
-                      <th style="text-align: right; padding-bottom: 8px;">Unit Price</th>
-                      <th style="text-align: right; padding-bottom: 8px;">Total</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    ${itemsRows}
-                  </tbody>
-                </table>
-              </div>
-
-              <!-- Financial Summary -->
-              <div class="card" style="margin-bottom: 28px;">
-                <table style="width: 100%; border-collapse: collapse; font-size: 14px;">
-                  <tr>
-                    <td style="padding: 4px 0; color: #64748b;">Subtotal:</td>
-                    <td style="padding: 4px 0; text-align: right; font-weight: 600; color: #0f172a;">৳${Number(orderData.subtotal || 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 4px 0; color: #64748b;">Shipping Fee:</td>
-                    <td style="padding: 4px 0; text-align: right; font-weight: 600; color: #0f172a;">৳${Number(orderData.shipping_fee || 70).toLocaleString()}</td>
-                  </tr>
-                  ${Number(orderData.discount || 0) > 0 ? `
-                  <tr>
-                    <td style="padding: 4px 0; color: #16a34a;">Discount Applied${orderData.promo_code ? ` (${orderData.promo_code})` : ''}:</td>
-                    <td style="padding: 4px 0; text-align: right; font-weight: 600; color: #16a34a;">-৳${Number(orderData.discount).toLocaleString()}</td>
-                  </tr>` : ''}
-                  <tr style="border-top: 1px solid #cbd5e1;">
-                    <td style="padding: 10px 0 0 0; font-weight: 800; font-size: 16px; color: #0f172a;">Total Payable:</td>
-                    <td style="padding: 10px 0 0 0; text-align: right; font-weight: 900; font-size: 18px; color: #0f172a;">৳${Number(orderData.total || 0).toLocaleString()}</td>
-                  </tr>
-                  <tr>
-                    <td style="padding: 4px 0; color: #64748b; font-size: 12px;">Payment Method:</td>
-                    <td style="padding: 4px 0; text-align: right; font-weight: 700; color: #0f172a; font-size: 12px; text-transform: uppercase;">${(orderData.payment_method || 'Cash on Delivery')}</td>
-                  </tr>
-                </table>
-              </div>
-
-              <!-- Track Button -->
-              <div style="text-align: center; margin: 32px 0;">
-                <a href="${trackingUrl}" class="btn">Track Package in Realtime &rarr;</a>
-              </div>
-            </div>
-
-            <div class="footer">
-              <p>&copy; ${new Date().getFullYear()} HYPERDRIVE Bangladesh. All products covered by 7-day exchange warranty.</p>
-            </div>
-          </div>
-        </body>
-        </html>
-      `
+      subject,
+      html,
+      text
     });
 
     if (res && (res as any).error) {

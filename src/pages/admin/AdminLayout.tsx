@@ -104,7 +104,7 @@ export default function AdminLayout() {
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col md:flex-row font-sans">
       {/* Sidebar */}
-      <aside className="w-full md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
+      <aside className="print:hidden w-full md:w-64 bg-slate-900 border-r border-slate-800 flex flex-col shrink-0">
         <div className="p-6 border-b border-slate-800/80 flex items-center gap-3">
           <div className="w-10 h-10 bg-emerald-600 text-white rounded-xl flex items-center justify-center font-bold shadow-lg shadow-emerald-600/30">
             A
@@ -166,8 +166,8 @@ export default function AdminLayout() {
       </aside>
 
       {/* Main Content Area */}
-      <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0">
+      <div className="flex-1 flex flex-col min-w-0 bg-slate-950 print:bg-white print:!block">
+        <header className="print:hidden h-16 bg-slate-900 border-b border-slate-800 px-6 flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <span className="text-xs font-semibold px-2.5 py-1 bg-emerald-500/10 text-emerald-400 rounded-lg border border-emerald-500/20">
               Live Mode
@@ -188,7 +188,7 @@ export default function AdminLayout() {
           </div>
         </header>
 
-        <main className="flex-1 p-6 overflow-y-auto bg-slate-950">
+        <main className="flex-1 p-6 overflow-y-auto bg-slate-950 print:p-0 print:overflow-visible print:bg-white">
           <Outlet />
         </main>
       </div>

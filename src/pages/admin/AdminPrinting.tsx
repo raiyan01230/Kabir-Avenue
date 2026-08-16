@@ -56,8 +56,9 @@ export default function AdminPrinting() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <>
+      <div className="space-y-6 print:hidden">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h1 className="text-2xl font-extrabold text-white">Printing &amp; Document Center</h1>
           <p className="text-xs text-slate-400 mt-1">Generate professional A4 invoices, delivery shipping labels, packing slips &amp; batch prints</p>
@@ -192,5 +193,7 @@ export default function AdminPrinting() {
         </table>
       </div>
     </div>
+    <PrintableOrders orders={orders.filter(o => selectedOrderIds.includes(o.id))} />
+    </>
   );
 }
