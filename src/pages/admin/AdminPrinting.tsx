@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import PrintableOrders from '../../components/admin/PrintableOrders';
 import { Printer, CheckSquare, Square, FileText, Package, Truck, Download } from 'lucide-react';
 
 export default function AdminPrinting() {
