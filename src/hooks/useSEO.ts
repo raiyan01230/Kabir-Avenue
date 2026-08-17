@@ -60,7 +60,38 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   const twitterHandle = globalSettings?.['seo_twitter_handle'] || '@hyperdrive_bd';
   const siteUrl = globalSettings?.['seo_site_url'] || window.location.origin;
 
-  const finalTitle = seo.title ? `${seo.title} | ${storeName}` : defaultTitle;
+  // Infer title from path if seo.title is not explicitly provided
+  let inferredTitle = seo?.title;
+  if (!inferredTitle) {
+    const path = window.location.pathname;
+    if (path === '/' || path === '' || path === '/index.html') {
+      inferredTitle = 'Home';
+    } else if (path.includes('/shop') || path.includes('/products')) {
+      inferredTitle = 'Shop All Products';
+    } else if (path.includes('/category')) {
+      inferredTitle = 'Category Collection';
+    } else if (path.includes('/cart')) {
+      inferredTitle = 'Shopping Cart';
+    } else if (path.includes('/checkout')) {
+      inferredTitle = 'Secure Checkout';
+    } else if (path.includes('/orders') || path.includes('/order-success')) {
+      inferredTitle = 'My Order History';
+    } else if (path.includes('/track')) {
+      inferredTitle = 'Track Order';
+    } else if (path.includes('/wishlist')) {
+      inferredTitle = 'My Wishlist';
+    } else if (path.includes('/account')) {
+      inferredTitle = 'Customer Account';
+    } else if (path.includes('/login')) {
+      inferredTitle = 'Customer Login';
+    } else if (path.includes('/admin')) {
+      inferredTitle = 'Admin Management Dashboard';
+    } else {
+      inferredTitle = 'Storefront';
+    }
+  }
+
+  const finalTitle = inferredTitle ? `${inferredTitle} | ${storeName}` : defaultTitle;
   const finalDesc = seo.description || defaultDesc;
   const finalKeywords = seo.keywords || defaultKeywords;
   const finalOgImage = seo.ogImage || defaultOgImage;
