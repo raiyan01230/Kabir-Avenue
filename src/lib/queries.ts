@@ -22,6 +22,168 @@ export type Banner = InferSelectModel<typeof homepageBanners>;
 export type StoreSetting = InferSelectModel<typeof storeSettings>;
 export type DeliveryZone = InferSelectModel<typeof deliveryZones>;
 
+const FALLBACK_CATEGORIES: Category[] = [
+  { id: 'cat-1', name: 'Gaming & PC', slug: 'gaming-pc', description: 'High performance gaming hardware', imageUrl: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80', storagePath: '', icon: 'Gamepad2', sortOrder: 1, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+  { id: 'cat-2', name: 'Peripherals', slug: 'peripherals', description: 'Keyboards, mice and audio gear', imageUrl: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=600&q=80', storagePath: '', icon: 'Keyboard', sortOrder: 2, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+  { id: 'cat-3', name: 'Smart Gadgets', slug: 'smart-gadgets', description: 'Wearables and smart tech', imageUrl: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', storagePath: '', icon: 'Watch', sortOrder: 3, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+  { id: 'cat-4', name: 'Mobile & Accessories', slug: 'mobile-accessories', description: 'Chargers, cables and cases', imageUrl: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=600&q=80', storagePath: '', icon: 'Smartphone', sortOrder: 4, isActive: true, createdAt: new Date(), updatedAt: new Date() },
+];
+
+const FALLBACK_PRODUCTS: Product[] = [
+  {
+    id: 'prod-1',
+    name: 'HyperDrive Pro Mechanical Keyboard',
+    slug: 'hyperdrive-pro-mechanical-keyboard',
+    sku: 'HD-KB-01',
+    shortDescription: 'Hot-swappable RGB mechanical keyboard with custom tactile switches.',
+    description: 'Engineered for gaming enthusiasts and professional typists. Features per-key RGB lighting, durable PBT keycaps, gasket-mounted design, and ultra-low latency wireless connectivity.',
+    price: '4500.00',
+    comparePrice: '5500.00',
+    discountPercentage: 18,
+    stockQuantity: 25,
+    status: 'active',
+    featured: true,
+    categoryId: 'cat-2',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    images: ['https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&q=80'],
+    imageUrl: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&q=80',
+    image_url: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'prod-2',
+    name: 'Apex Ultra Wireless Gaming Mouse',
+    slug: 'apex-ultra-wireless-gaming-mouse',
+    sku: 'HD-MS-02',
+    shortDescription: 'Ultra-lightweight 59g optical gaming mouse with 26K DPI sensor.',
+    description: 'Designed for lightning-fast flicks and pinpoint accuracy. Includes tri-mode connectivity (2.4GHz wireless, Bluetooth, and wired USB-C) with 90-hour battery life.',
+    price: '3200.00',
+    comparePrice: '4000.00',
+    discountPercentage: 20,
+    stockQuantity: 40,
+    status: 'active',
+    featured: true,
+    categoryId: 'cat-2',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    images: ['https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80'],
+    imageUrl: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80',
+    image_url: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'prod-3',
+    name: 'Quantum 7.1 Surround Gaming Headset',
+    slug: 'quantum-7-1-surround-gaming-headset',
+    sku: 'HD-HS-03',
+    shortDescription: 'Immersive spatial audio headset with noise-canceling microphone.',
+    description: 'Hear every footstep with custom-tuned 50mm neodymium drivers. Plush memory foam ear cushions ensure supreme comfort during marathon gaming sessions.',
+    price: '5800.00',
+    comparePrice: '7000.00',
+    discountPercentage: 17,
+    stockQuantity: 15,
+    status: 'active',
+    featured: true,
+    categoryId: 'cat-2',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    images: ['https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=80'],
+    imageUrl: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=80',
+    image_url: 'https://images.unsplash.com/photo-1546435770-a3e426bf472b?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'prod-4',
+    name: 'SwiftCharge 65W GaN Fast Charger',
+    slug: 'swiftcharge-65w-gan-fast-charger',
+    sku: 'HD-CH-04',
+    shortDescription: 'Compact multi-port gallium nitride wall charger for laptops and phones.',
+    description: 'Power up three devices simultaneously with intelligent power distribution. Safe, cool-running, and travel-ready with foldable US/UK plugs.',
+    price: '2200.00',
+    comparePrice: '2800.00',
+    discountPercentage: 21,
+    stockQuantity: 50,
+    status: 'active',
+    featured: false,
+    categoryId: 'cat-4',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    images: ['https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80'],
+    imageUrl: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80',
+    image_url: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=800&q=80'
+  },
+  {
+    id: 'prod-5',
+    name: 'Eclipse 27" 165Hz IPS Gaming Monitor',
+    slug: 'eclipse-27-inch-165hz-ips-gaming-monitor',
+    sku: 'HD-MN-05',
+    shortDescription: 'QHD 1440p 1ms IPS gaming display with G-Sync and FreeSync support.',
+    description: 'Vibrant colors, HDR400, and butter-smooth 165Hz refresh rate for competitive and cinematic gaming alike.',
+    price: '28500.00',
+    comparePrice: '32000.00',
+    discountPercentage: 11,
+    stockQuantity: 8,
+    status: 'active',
+    featured: true,
+    categoryId: 'cat-1',
+    createdAt: new Date(),
+    updatedAt: new Date(),
+    images: ['https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80'],
+    imageUrl: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80',
+    image_url: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?auto=format&fit=crop&w=800&q=80'
+  }
+];
+
+async function fetchAllProducts(): Promise<any[]> {
+  try {
+    const res = await fetch('/api/store/products', { cache: 'no-store' });
+    const contentType = res.headers.get('content-type');
+    if (res.ok && contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('products')
+      .select('*, categories(*), product_images(*)');
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  return FALLBACK_PRODUCTS;
+}
+
+async function fetchAllCategories(): Promise<any[]> {
+  try {
+    const res = await fetch('/api/store/categories', { cache: 'no-store' });
+    const contentType = res.headers.get('content-type');
+    if (res.ok && contentType && contentType.includes('application/json')) {
+      const data = await res.json();
+      if (Array.isArray(data) && data.length > 0) return data;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from('categories')
+      .select('*');
+    if (!error && data && data.length > 0) {
+      return data;
+    }
+  } catch (err) {
+    // ignore
+  }
+
+  return FALLBACK_CATEGORIES;
+}
+
 export function isProductVisible(p: any): boolean {
   if (!p) return false;
   // If explicitly archived or draft, hide from customer website
@@ -124,40 +286,37 @@ function formatProductWithImages(product: any): Product {
 
 export async function getFeaturedProducts(): Promise<Product[]> {
   try {
-    const res = await fetch('/api/store/products', { cache: 'no-store' });
-    const data = await res.json();
+    const data = await fetchAllProducts();
     if (data && Array.isArray(data)) {
       const visible = data.filter(isProductVisible);
-      const featured = visible.filter((p: any) => p.featured === true);
+      const featured = visible.filter((p: any) => p.featured === true || p.is_featured === true);
       const list = featured.length > 0 ? featured : visible;
       return list.map(formatProductWithImages);
     }
   } catch (err) {
     console.warn('Featured products fetch error:', err);
   }
-  return [];
+  return FALLBACK_PRODUCTS.map(formatProductWithImages);
 }
 
 export async function getDiscountDeals(): Promise<Product[]> {
   try {
-    const res = await fetch('/api/store/products', { cache: 'no-store' });
-    const data = await res.json();
+    const data = await fetchAllProducts();
     if (data && Array.isArray(data)) {
       const visible = data.filter(isProductVisible);
-      const deals = visible.filter((p: any) => Number(p.compare_price || 0) > Number(p.price || 0) || Number(p.discount_percentage || 0) > 0);
+      const deals = visible.filter((p: any) => Number(p.compare_price || p.comparePrice || 0) > Number(p.price || 0) || Number(p.discount_percentage || p.discountPercentage || 0) > 0);
       const list = deals.length > 0 ? deals : visible;
       return list.map(formatProductWithImages);
     }
   } catch (err) {
     console.warn('Discount deals fetch error:', err);
   }
-  return [];
+  return FALLBACK_PRODUCTS.map(formatProductWithImages);
 }
 
 export async function getNewArrivals(): Promise<Product[]> {
   try {
-    const res = await fetch('/api/store/products', { cache: 'no-store' });
-    const data = await res.json();
+    const data = await fetchAllProducts();
     if (data && Array.isArray(data)) {
       const visible = data.filter(isProductVisible);
       return visible.map(formatProductWithImages);
@@ -165,24 +324,23 @@ export async function getNewArrivals(): Promise<Product[]> {
   } catch (err) {
     console.warn('New arrivals fetch error:', err);
   }
-  return [];
+  return FALLBACK_PRODUCTS.map(formatProductWithImages);
 }
 
 export async function getCategories(): Promise<Category[]> {
   try {
-    const res = await fetch('/api/store/categories', { cache: 'no-store' });
-    const data = await res.json();
+    const data = await fetchAllCategories();
     if (data && Array.isArray(data) && data.length > 0) {
       return data.filter((c: any) => c.is_active !== false && c.isActive !== false).map((cat: any) => ({
         ...cat,
-        imageUrl: getStorageImageUrl(cat.storage_path || cat.image_url || cat.imageUrl, 'ecommerce')
+        imageUrl: getStorageImageUrl(cat.storage_path || cat.storagePath || cat.image_url || cat.imageUrl, 'ecommerce')
       })) as Category[];
     }
   } catch (err) {
     console.warn('Categories fetch error:', err);
   }
 
-  return [];
+  return FALLBACK_CATEGORIES;
 }
 
 export interface CatalogFilterOptions {
@@ -196,9 +354,8 @@ export interface CatalogFilterOptions {
 
 export async function getFilteredCatalog(filters: CatalogFilterOptions): Promise<Product[]> {
   try {
-    const res = await fetch('/api/store/products', { cache: 'no-store' });
-    const data = await res.json();
-    if (!data || !Array.isArray(data)) return [];
+    const data = await fetchAllProducts();
+    if (!data || !Array.isArray(data)) return FALLBACK_PRODUCTS.map(formatProductWithImages);
 
     let items = data.filter(isProductVisible).map(formatProductWithImages);
 
@@ -217,7 +374,8 @@ export async function getFilteredCatalog(filters: CatalogFilterOptions): Promise
       items = items.filter((p: any) => 
         p.categories?.slug === filters.categorySlug || 
         p.category?.slug === filters.categorySlug ||
-        p.category_id === filters.categorySlug
+        p.category_id === filters.categorySlug ||
+        p.categoryId === filters.categorySlug
       );
     }
 
@@ -230,7 +388,7 @@ export async function getFilteredCatalog(filters: CatalogFilterOptions): Promise
     }
 
     if (filters.inStockOnly) {
-      items = items.filter((p: any) => Number(p.stock_quantity || 0) > 0);
+      items = items.filter((p: any) => Number(p.stock_quantity || p.stockQuantity || 0) > 0);
     }
 
     if (filters.sortBy === 'price_asc') {
@@ -246,7 +404,7 @@ export async function getFilteredCatalog(filters: CatalogFilterOptions): Promise
     return items;
   } catch (err) {
     console.error('Catalog filter error:', err);
-    return [];
+    return FALLBACK_PRODUCTS.map(formatProductWithImages);
   }
 }
 
