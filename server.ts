@@ -1509,42 +1509,7 @@ async function startServer() {
 
       // 2. Fetch all order_items matching this product_id
       const { data: orderItems, error: itemsErr } = await (db.from('order_items') as any)
-        .select(`
-          id,
-          order_id,
-          product_id,
-          product_name_snapshot,
-          product_image_snapshot,
-          unit_price,
-          quantity,
-          subtotal,
-          created_at,
-          orders (
-            id,
-            order_number,
-            order_status,
-            payment_method,
-            payment_status,
-            created_at,
-            customer_id,
-            customers (
-              id,
-              full_name,
-              email,
-              phone
-            ),
-            shipping_addresses (
-              full_name,
-              phone,
-              email,
-              division,
-              district,
-              thana,
-              full_address,
-              delivery_area
-            )
-          )
-        `)
+        .select('*')
         .eq('product_id', id)
         .order('created_at', { ascending: false });
 
@@ -1553,6 +1518,44 @@ async function startServer() {
       }
 
       const itemsList = orderItems || [];
+      const orderIds = Array.from(new Set(itemsList.map((it: any) => it.order_id).filter(Boolean)));
+
+      const ordersMap = new Map();
+      const customersMap = new Map();
+      const shippingMap = new Map();
+
+      if (orderIds.length > 0) {
+        const { data: ordersData } = await (db.from('orders') as any)
+          .select('*')
+          .in('id', orderIds);
+
+        if (ordersData) {
+          for (const ord of ordersData) {
+            ordersMap.set(ord.id, ord);
+          }
+        }
+
+        const customerIds = Array.from(new Set((ordersData || []).map((o: any) => o.customer_id).filter(Boolean)));
+        if (customerIds.length > 0) {
+          const { data: custData } = await (db.from('customers') as any)
+            .select('*')
+            .in('id', customerIds);
+          if (custData) {
+            for (const c of custData) {
+              customersMap.set(c.id, c);
+            }
+          }
+        }
+
+        const { data: shipData } = await (db.from('shipping_addresses') as any)
+          .select('*')
+          .in('order_id', orderIds);
+        if (shipData) {
+          for (const s of shipData) {
+            shippingMap.set(s.order_id, s);
+          }
+        }
+      }
 
       // Calculate aggregate statistics
       let totalUnitsSold = 0;
@@ -1562,9 +1565,9 @@ async function startServer() {
       let lastOrderedDate: string | null = null;
 
       const purchaseHistory = itemsList.map((it: any) => {
-        const ord = it.orders;
-        const cust = ord?.customers;
-        const ship = ord?.shipping_addresses?.[0] || ord?.shipping_addresses;
+        const ord = ordersMap.get(it.order_id);
+        const cust = ord?.customer_id ? customersMap.get(ord.customer_id) : null;
+        const ship = shippingMap.get(it.order_id);
         const qty = Number(it.quantity || 1);
         const linePrice = Number(it.unit_price);
         const lineTotal = Number(it.subtotal || (linePrice * qty));
@@ -1577,7 +1580,7 @@ async function startServer() {
         if (!uniqueCustomerMap.has(custId)) {
           uniqueCustomerMap.set(custId, {
             id: cust?.id || custId,
-            name: cust?.full_name || ship?.full_name || 'Customer',
+            name: cust?.fullName || cust?.full_name || ship?.fullName || ship?.full_name || 'Customer',
             email: cust?.email || ship?.email || 'N/A',
             phone: cust?.phone || ship?.phone || 'N/A',
             totalUnits: 0,
@@ -1588,24 +1591,27 @@ async function startServer() {
         custStat.totalUnits += qty;
         custStat.totalSpent += lineTotal;
 
-        if (ord?.created_at && (!lastOrderedDate || new Date(ord.created_at) > new Date(lastOrderedDate))) {
-          lastOrderedDate = ord.created_at;
+        if (ord?.createdAt || ord?.created_at) {
+          const dt = ord.createdAt || ord.created_at;
+          if (!lastOrderedDate || new Date(dt) > new Date(lastOrderedDate)) {
+            lastOrderedDate = dt;
+          }
         }
 
         return {
           orderItemId: it.id,
-          orderId: ord?.id,
-          orderNumber: ord?.order_number || 'N/A',
-          orderDate: ord?.created_at || it.created_at,
-          orderStatus: ord?.order_status || 'confirmed',
-          paymentStatus: ord?.payment_status || 'pending',
-          paymentMethod: ord?.payment_method || 'Cash on Delivery',
+          orderId: ord?.id || it.order_id,
+          orderNumber: ord?.orderNumber || ord?.order_number || 'N/A',
+          orderDate: ord?.createdAt || ord?.created_at || it.created_at,
+          orderStatus: ord?.orderStatus || ord?.order_status || 'confirmed',
+          paymentStatus: ord?.paymentStatus || ord?.payment_status || 'pending',
+          paymentMethod: ord?.paymentMethod || ord?.payment_method || 'Cash on Delivery',
           quantity: qty,
           unitPrice: linePrice,
           lineTotal,
           customer: {
             id: cust?.id || null,
-            name: cust?.full_name || ship?.full_name || 'Customer',
+            name: cust?.fullName || cust?.full_name || ship?.fullName || ship?.full_name || 'Customer',
             email: cust?.email || ship?.email || 'N/A',
             phone: cust?.phone || ship?.phone || 'N/A',
             location: ship ? `${ship.thana || ''}, ${ship.district || ''}` : 'N/A'
