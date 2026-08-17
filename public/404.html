@@ -4,17 +4,22 @@
     <meta charset="UTF-8" />
     <title>HYPERDRIVE BD</title>
     <script type="text/javascript">
-      // Single Page Apps for GitHub Pages
-      // Redirects any 404 to index.html with query parameters preserved
-      var pathSegmentsToKeep = 0;
+      // Single Page Apps for GitHub Pages (subpath repository support)
+      var pathSegmentsToKeep = 1;
       var l = window.location;
-      l.replace(
-        l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
-        l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/') + '/?p=/' +
-        l.pathname.slice(1).split('/').slice(pathSegmentsToKeep).join('/') +
-        (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
-        l.hash
-      );
+      
+      // If we are already redirected with ?p=, do nothing
+      if (!l.search.includes('?p=') && !l.search.includes('&p=')) {
+        var pathname = l.pathname.split('/').slice(0, 1 + pathSegmentsToKeep).join('/');
+        var restPath = l.pathname.split('/').slice(1 + pathSegmentsToKeep).join('/');
+        
+        l.replace(
+          l.protocol + '//' + l.hostname + (l.port ? ':' + l.port : '') +
+          pathname + '/?p=/' + restPath +
+          (l.search ? '&q=' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+        );
+      }
     </script>
   </head>
   <body>
