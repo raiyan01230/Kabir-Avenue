@@ -44,6 +44,7 @@ import AdminSEO from './pages/admin/AdminSEO';
 import AdminSecurity from './pages/admin/AdminSecurity';
 import AdminData from './pages/admin/AdminData';
 import AdminVIPOrderCreate from './pages/admin/AdminVIPOrderCreate';
+import AdminOrderPrintPage from './pages/admin/AdminOrderPrintPage';
 
 function StoreApp() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -114,6 +115,9 @@ function StoreApp() {
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
+          <Route path="/admin/orders/:orderId/print" element={<AdminOrderPrintPage />} />
+          <Route path="/admin/orders/print" element={<AdminOrderPrintPage />} />
+          <Route path="/admin/printing/preview" element={<AdminOrderPrintPage />} />
           <Route path="/admin" element={<AdminLayout />}>
             <Route index element={<AdminDashboard />} />
             <Route path="dashboard" element={<AdminDashboard />} />

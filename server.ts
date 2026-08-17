@@ -346,14 +346,19 @@ async function startServer() {
 
         // 2. Insert Items
         if (items && items.length > 0) {
-          const orderItemsData = items.map((item: any) => ({
+          const orderItemsData = items.map((item: any) => {
+            const p = item.product || {};
+            const resolvedImg = item.productImageSnapshot || item.product_image_snapshot || item.imageUrl || item.image || p.imageUrl || p.image_url || p.images?.[0] || p.product_images?.[0]?.image_url || null;
+            return {
               order_id: order.id,
-              product_id: item.productId,
-              product_name_snapshot: item.product?.name || 'Product Item',
+              product_id: item.productId || item.product_id || p.id || null,
+              product_name_snapshot: p.name || item.productName || item.name || 'Product Item',
+              product_image_snapshot: resolvedImg,
               unit_price: item.unitPrice,
               quantity: item.quantity,
               subtotal: parseFloat(item.unitPrice) * item.quantity
-          }));
+            };
+          });
           const { error: itemsError } = await (db.from('order_items') as any).insert(orderItemsData);
           if (itemsError) console.warn('Item insert warning:', itemsError);
         }
@@ -765,10 +770,100 @@ async function startServer() {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { data, error } = await (db.from('orders') as any)
-      .select('*, customers(full_name, email, phone), shipping_addresses(*), order_items(*)')
+      .select(`
+        *,
+        customers(id, full_name, email, phone),
+        shipping_addresses(*),
+        order_items(
+          *,
+          products(
+            id,
+            name,
+            sku,
+            slug,
+            price,
+            stock_quantity,
+            status,
+            product_images(id, image_url, storage_path, is_primary)
+          )
+        )
+      `)
       .order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data || []);
+  });
+
+  // Batch orders for multi-print
+  app.get("/api/admin/orders/by-ids", async (req, res) => {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'DB error' });
+    const idsParam = req.query.ids as string;
+    if (!idsParam) return res.json([]);
+    const ids = idsParam.split(',').map(id => id.trim()).filter(Boolean);
+    if (ids.length === 0) return res.json([]);
+
+    const { data, error } = await (db.from('orders') as any)
+      .select(`
+        *,
+        customers(id, full_name, email, phone),
+        shipping_addresses(*),
+        order_items(
+          *,
+          products(
+            id,
+            name,
+            sku,
+            slug,
+            price,
+            stock_quantity,
+            status,
+            product_images(id, image_url, storage_path, is_primary)
+          )
+        )
+      `)
+      .in('id', ids)
+      .order('created_at', { ascending: false });
+    if (error) return res.status(500).json({ error: error.message });
+    res.json(data || []);
+  });
+
+  // Single Order Details for Print & View
+  app.get("/api/admin/orders/:id", async (req, res) => {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'DB error' });
+    const { id } = req.params;
+
+    let query = (db.from('orders') as any)
+      .select(`
+        *,
+        customers(id, full_name, email, phone),
+        shipping_addresses(*),
+        order_items(
+          *,
+          products(
+            id,
+            name,
+            sku,
+            slug,
+            price,
+            stock_quantity,
+            status,
+            product_images(id, image_url, storage_path, is_primary)
+          )
+        ),
+        order_status_history(*)
+      `);
+
+    if (/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id)) {
+      query = query.eq('id', id);
+    } else {
+      query = query.or(`id.eq.${id},order_number.eq.${id}`);
+    }
+
+    const { data, error } = await query.maybeSingle();
+    if (error) return res.status(500).json({ error: error.message });
+    if (!data) return res.status(404).json({ error: 'Order not found' });
+    res.json(data);
   });
 
   app.put("/api/admin/orders/:id", async (req, res) => {
@@ -795,6 +890,182 @@ async function startServer() {
 
     await logAdminAction(db, admin_email || 'system@admin', 'UPDATE', 'orders', id, null, updated, `Updated order ${updated.order_number} status to ${order_status}`);
     res.json({ success: true, order: updated });
+  });
+
+  // Single Order Permanent Deletion with Child Records Cleanup
+  app.delete("/api/admin/orders/:id", async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Database connection error' });
+      const { id } = req.params;
+      const { admin_email, restore_stock = true } = req.body || {};
+
+      // 1. Fetch existing order to log and retrieve item details
+      let query = (db.from('orders') as any)
+        .select('*, order_items(*), shipping_addresses(*)')
+        .eq('id', id);
+
+      const { data: existingOrder, error: fetchErr } = await query.maybeSingle();
+
+      if (fetchErr) {
+        return res.status(500).json({ error: fetchErr.message });
+      }
+
+      if (!existingOrder) {
+        return res.status(404).json({ error: 'Order not found or already deleted' });
+      }
+
+      // 2. Optionally restore product stock if order was active
+      if (restore_stock && existingOrder.order_items && Array.isArray(existingOrder.order_items)) {
+        if (!['cancelled', 'returned'].includes(existingOrder.order_status)) {
+          for (const it of existingOrder.order_items) {
+            if (it.product_id && it.quantity > 0) {
+              try {
+                const { data: prodData } = await (db.from('products') as any)
+                  .select('stock_quantity')
+                  .eq('id', it.product_id)
+                  .maybeSingle();
+
+                if (prodData && prodData.stock_quantity !== undefined) {
+                  const restored = Number(prodData.stock_quantity) + Number(it.quantity);
+                  await (db.from('products') as any)
+                    .update({ stock_quantity: restored })
+                    .eq('id', it.product_id);
+                }
+              } catch (stockErr) {
+                console.warn('Could not restore stock for deleted order item:', stockErr);
+              }
+            }
+          }
+        }
+      }
+
+      // 3. Delete dependent child records safely in sequence
+      try {
+        await (db.from('order_status_history') as any).delete().eq('order_id', id);
+      } catch (e) {
+        console.warn('Status history cleanup warning:', e);
+      }
+
+      try {
+        await (db.from('shipping_addresses') as any).delete().eq('order_id', id);
+      } catch (e) {
+        console.warn('Shipping address cleanup warning:', e);
+      }
+
+      try {
+        await (db.from('order_items') as any).delete().eq('order_id', id);
+      } catch (e) {
+        console.warn('Order items cleanup warning:', e);
+      }
+
+      try {
+        await (db.from('reviews') as any).delete().eq('order_id', id);
+      } catch (e) {
+        console.warn('Reviews order reference cleanup warning:', e);
+      }
+
+      // 4. Delete the main order row
+      const { error: delErr } = await (db.from('orders') as any).delete().eq('id', id);
+      if (delErr) {
+        return res.status(400).json({ error: delErr.message });
+      }
+
+      // 5. Write audit log
+      await logAdminAction(
+        db,
+        admin_email || 'system@admin',
+        'DELETE',
+        'orders',
+        id,
+        existingOrder,
+        null,
+        `Permanently deleted order #${existingOrder.order_number} (Total: ৳${existingOrder.total})`
+      );
+
+      res.json({
+        success: true,
+        deleted: true,
+        orderNumber: existingOrder.order_number,
+        message: `Order #${existingOrder.order_number} has been permanently deleted from database.`
+      });
+    } catch (err: any) {
+      console.error('Delete order error:', err);
+      res.status(500).json({ error: err.message || 'Failed to delete order' });
+    }
+  });
+
+  // Bulk Orders Deletion
+  app.post("/api/admin/orders/bulk-delete", async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Database connection error' });
+      const { ids, admin_email, restore_stock = true } = req.body;
+
+      if (!ids || !Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ error: 'No order IDs specified for deletion' });
+      }
+
+      let deletedCount = 0;
+      const errors: string[] = [];
+
+      for (const orderId of ids) {
+        try {
+          const { data: ord } = await (db.from('orders') as any)
+            .select('*, order_items(*)')
+            .eq('id', orderId)
+            .maybeSingle();
+
+          if (ord) {
+            // Restore stock if needed
+            if (restore_stock && ord.order_items && Array.isArray(ord.order_items)) {
+              if (!['cancelled', 'returned'].includes(ord.order_status)) {
+                for (const it of ord.order_items) {
+                  if (it.product_id && it.quantity > 0) {
+                    try {
+                      const { data: p } = await (db.from('products') as any).select('stock_quantity').eq('id', it.product_id).maybeSingle();
+                      if (p && p.stock_quantity !== undefined) {
+                        await (db.from('products') as any).update({ stock_quantity: Number(p.stock_quantity) + Number(it.quantity) }).eq('id', it.product_id);
+                      }
+                    } catch {}
+                  }
+                }
+              }
+            }
+
+            // Cleanup child tables
+            await (db.from('order_status_history') as any).delete().eq('order_id', orderId);
+            await (db.from('shipping_addresses') as any).delete().eq('order_id', orderId);
+            await (db.from('order_items') as any).delete().eq('order_id', orderId);
+            await (db.from('reviews') as any).delete().eq('order_id', orderId);
+            await (db.from('orders') as any).delete().eq('id', orderId);
+
+            deletedCount++;
+          }
+        } catch (e: any) {
+          errors.push(`Failed on ${orderId}: ${e.message}`);
+        }
+      }
+
+      await logAdminAction(
+        db,
+        admin_email || 'system@admin',
+        'BULK_DELETE',
+        'orders',
+        undefined,
+        { count: ids.length, ids },
+        { deletedCount },
+        `Bulk deleted ${deletedCount} orders.`
+      );
+
+      res.json({
+        success: true,
+        deletedCount,
+        message: `Successfully deleted ${deletedCount} order(s).`
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message || 'Bulk delete failed' });
+    }
   });
 
   // Manual / VIP Order Creation
@@ -964,13 +1235,410 @@ async function startServer() {
     });
   });
 
-  // Customers
+  // Customers & Comprehensive CRM Endpoints
   app.get("/api/admin/customers", async (req, res) => {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
-    const { data, error } = await (db.from('customers') as any).select('*, orders(id, total, created_at)').order('created_at', { ascending: false });
-    if (error) return res.status(500).json({ error: error.message });
-    res.json(data || []);
+    try {
+      const { data: customersData, error } = await (db.from('customers') as any)
+        .select(`
+          *,
+          orders (
+            id,
+            order_number,
+            total,
+            subtotal,
+            shipping_fee,
+            discount,
+            tax,
+            order_status,
+            payment_method,
+            payment_status,
+            created_at,
+            order_items (
+              id,
+              product_id,
+              product_name_snapshot,
+              product_image_snapshot,
+              unit_price,
+              quantity,
+              subtotal
+            )
+          )
+        `)
+        .order('created_at', { ascending: false });
+
+      if (error) return res.status(500).json({ error: error.message });
+
+      // Enrich customers with computed metrics
+      const enriched = (customersData || []).map((c: any) => {
+        const custOrders = c.orders || [];
+        const totalSpent = custOrders.reduce((sum: number, o: any) => sum + Number(o.total || 0), 0);
+        let totalUnitsPurchased = 0;
+        const uniqueProductIds = new Set<string>();
+
+        custOrders.forEach((o: any) => {
+          (o.order_items || []).forEach((it: any) => {
+            totalUnitsPurchased += Number(it.quantity || 0);
+            if (it.product_id) uniqueProductIds.add(it.product_id);
+            else if (it.product_name_snapshot) uniqueProductIds.add(it.product_name_snapshot);
+          });
+        });
+
+        const orderCount = custOrders.length;
+        const aov = orderCount > 0 ? Math.round(totalSpent / orderCount) : 0;
+        const lastOrderDate = custOrders.length > 0 ? custOrders[0].created_at : null;
+
+        return {
+          ...c,
+          total_orders: orderCount,
+          total_spent: totalSpent,
+          total_units_purchased: totalUnitsPurchased,
+          total_products_purchased: uniqueProductIds.size,
+          average_order_value: aov,
+          last_order_date: lastOrderDate
+        };
+      });
+
+      res.json(enriched);
+    } catch (err: any) {
+      console.error('Error fetching admin customers:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Get Detailed Single Customer with Full Order History, Product Purchases, and Active Cart
+  app.get("/api/admin/customers/:id", async (req, res) => {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'DB error' });
+    const { id } = req.params;
+
+    try {
+      // 1. Fetch Customer Record
+      const { data: customer, error: custErr } = await (db.from('customers') as any)
+        .select('*')
+        .eq('id', id)
+        .maybeSingle();
+
+      if (custErr || !customer) {
+        return res.status(404).json({ error: 'Customer not found' });
+      }
+
+      // 2. Fetch Orders for this Customer with Order Items and Shipping Details
+      const { data: customerOrders, error: ordErr } = await (db.from('orders') as any)
+        .select(`
+          *,
+          shipping_addresses (*),
+          order_status_history (*),
+          order_items (
+            id,
+            order_id,
+            product_id,
+            product_name_snapshot,
+            product_image_snapshot,
+            unit_price,
+            quantity,
+            subtotal,
+            created_at,
+            products (
+              id,
+              name,
+              sku,
+              slug,
+              price,
+              stock_quantity,
+              status,
+              product_images (
+                id,
+                image_url,
+                storage_path,
+                is_primary,
+                sort_order
+              )
+            )
+          )
+        `)
+        .eq('customer_id', id)
+        .order('created_at', { ascending: false });
+
+      const ordersList = customerOrders || [];
+
+      // 3. Fetch Active Cart for this Customer (Separated from Purchase History)
+      const { data: cartData } = await (db.from('carts') as any)
+        .select(`
+          id,
+          created_at,
+          updated_at,
+          cart_items (
+            id,
+            product_id,
+            quantity,
+            unit_price,
+            created_at,
+            products (
+              id,
+              name,
+              sku,
+              slug,
+              price,
+              stock_quantity,
+              product_images (
+                id,
+                image_url,
+                storage_path,
+                is_primary
+              )
+            )
+          )
+        `)
+        .eq('customer_id', id)
+        .maybeSingle();
+
+      // 4. Calculate Aggregate Purchased Products Map
+      const purchasedProductsMap: Record<string, any> = {};
+      let totalSpent = 0;
+      let totalUnitsPurchased = 0;
+
+      ordersList.forEach((order: any) => {
+        totalSpent += Number(order.total || 0);
+
+        (order.order_items || []).forEach((item: any) => {
+          const qty = Number(item.quantity || 0);
+          const lineTotal = Number(item.subtotal || (Number(item.unit_price) * qty));
+          totalUnitsPurchased += qty;
+
+          const key = item.product_id || item.product_name_snapshot || 'item';
+          const p = item.products;
+
+          // Determine best image
+          const primaryImg = item.product_image_snapshot
+            || p?.product_images?.find((img: any) => img.is_primary)?.image_url
+            || p?.product_images?.[0]?.image_url
+            || 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=200&auto=format&fit=crop&q=80';
+
+          if (!purchasedProductsMap[key]) {
+            purchasedProductsMap[key] = {
+              productId: item.product_id || null,
+              name: item.product_name_snapshot || p?.name || 'Product',
+              sku: p?.sku || 'N/A',
+              slug: p?.slug || null,
+              imageUrl: primaryImg,
+              totalUnits: 0,
+              orderCount: 0,
+              totalSpent: 0,
+              lastPurchasedDate: order.created_at,
+              purchasedOrders: []
+            };
+          }
+
+          purchasedProductsMap[key].totalUnits += qty;
+          purchasedProductsMap[key].totalSpent += lineTotal;
+          purchasedProductsMap[key].orderCount += 1;
+          if (new Date(order.created_at) > new Date(purchasedProductsMap[key].lastPurchasedDate)) {
+            purchasedProductsMap[key].lastPurchasedDate = order.created_at;
+          }
+
+          purchasedProductsMap[key].purchasedOrders.push({
+            orderId: order.id,
+            orderNumber: order.order_number,
+            orderDate: order.created_at,
+            quantity: qty,
+            unitPrice: Number(item.unit_price),
+            lineTotal,
+            orderStatus: order.order_status
+          });
+        });
+      });
+
+      const purchasedProducts = Object.values(purchasedProductsMap).sort((a, b) => b.totalSpent - a.totalSpent);
+      const totalOrders = ordersList.length;
+      const averageOrderValue = totalOrders > 0 ? Math.round(totalSpent / totalOrders) : 0;
+      const lastOrderDate = ordersList.length > 0 ? ordersList[0].created_at : null;
+
+      // Compute current active cart value
+      const activeCartItems = cartData?.cart_items || [];
+      const currentCartValue = activeCartItems.reduce((acc: number, item: any) => {
+        return acc + (Number(item.unit_price || item.products?.price || 0) * Number(item.quantity || 1));
+      }, 0);
+
+      res.json({
+        customer,
+        summary: {
+          totalOrders,
+          totalSpent,
+          totalUnitsPurchased,
+          totalProductsPurchased: purchasedProducts.length,
+          averageOrderValue,
+          currentCartValue,
+          lastOrderDate
+        },
+        orders: ordersList,
+        purchasedProducts,
+        activeCart: {
+          cartId: cartData?.id || null,
+          items: activeCartItems,
+          cartTotal: currentCartValue
+        }
+      });
+    } catch (err: any) {
+      console.error('Error fetching customer profile history:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Product Sales & Customer Purchase History Endpoint
+  app.get("/api/admin/products/:id/purchase-history", async (req, res) => {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'DB error' });
+    const { id } = req.params;
+
+    try {
+      // 1. Fetch product basic info
+      const { data: product, error: pErr } = await (db.from('products') as any)
+        .select(`
+          *,
+          category:categories(name),
+          product_images(*)
+        `)
+        .eq('id', id)
+        .maybeSingle();
+
+      if (pErr || !product) {
+        return res.status(404).json({ error: 'Product not found' });
+      }
+
+      // 2. Fetch all order_items matching this product_id
+      const { data: orderItems, error: itemsErr } = await (db.from('order_items') as any)
+        .select(`
+          id,
+          order_id,
+          product_id,
+          product_name_snapshot,
+          product_image_snapshot,
+          unit_price,
+          quantity,
+          subtotal,
+          created_at,
+          orders (
+            id,
+            order_number,
+            order_status,
+            payment_method,
+            payment_status,
+            created_at,
+            customer_id,
+            customers (
+              id,
+              full_name,
+              email,
+              phone
+            ),
+            shipping_addresses (
+              full_name,
+              phone,
+              email,
+              division,
+              district,
+              thana,
+              full_address,
+              delivery_area
+            )
+          )
+        `)
+        .eq('product_id', id)
+        .order('created_at', { ascending: false });
+
+      if (itemsErr) {
+        return res.status(500).json({ error: itemsErr.message });
+      }
+
+      const itemsList = orderItems || [];
+
+      // Calculate aggregate statistics
+      let totalUnitsSold = 0;
+      let totalRevenue = 0;
+      const uniqueOrderIds = new Set<string>();
+      const uniqueCustomerMap = new Map<string, any>();
+      let lastOrderedDate: string | null = null;
+
+      const purchaseHistory = itemsList.map((it: any) => {
+        const ord = it.orders;
+        const cust = ord?.customers;
+        const ship = ord?.shipping_addresses?.[0] || ord?.shipping_addresses;
+        const qty = Number(it.quantity || 1);
+        const linePrice = Number(it.unit_price);
+        const lineTotal = Number(it.subtotal || (linePrice * qty));
+
+        totalUnitsSold += qty;
+        totalRevenue += lineTotal;
+        if (ord?.id) uniqueOrderIds.add(ord.id);
+
+        const custId = ord?.customer_id || cust?.id || cust?.email || 'guest';
+        if (!uniqueCustomerMap.has(custId)) {
+          uniqueCustomerMap.set(custId, {
+            id: cust?.id || custId,
+            name: cust?.full_name || ship?.full_name || 'Customer',
+            email: cust?.email || ship?.email || 'N/A',
+            phone: cust?.phone || ship?.phone || 'N/A',
+            totalUnits: 0,
+            totalSpent: 0
+          });
+        }
+        const custStat = uniqueCustomerMap.get(custId);
+        custStat.totalUnits += qty;
+        custStat.totalSpent += lineTotal;
+
+        if (ord?.created_at && (!lastOrderedDate || new Date(ord.created_at) > new Date(lastOrderedDate))) {
+          lastOrderedDate = ord.created_at;
+        }
+
+        return {
+          orderItemId: it.id,
+          orderId: ord?.id,
+          orderNumber: ord?.order_number || 'N/A',
+          orderDate: ord?.created_at || it.created_at,
+          orderStatus: ord?.order_status || 'confirmed',
+          paymentStatus: ord?.payment_status || 'pending',
+          paymentMethod: ord?.payment_method || 'Cash on Delivery',
+          quantity: qty,
+          unitPrice: linePrice,
+          lineTotal,
+          customer: {
+            id: cust?.id || null,
+            name: cust?.full_name || ship?.full_name || 'Customer',
+            email: cust?.email || ship?.email || 'N/A',
+            phone: cust?.phone || ship?.phone || 'N/A',
+            location: ship ? `${ship.thana || ''}, ${ship.district || ''}` : 'N/A'
+          }
+        };
+      });
+
+      res.json({
+        product: {
+          id: product.id,
+          name: product.name,
+          sku: product.sku,
+          slug: product.slug,
+          price: product.price,
+          stock_quantity: product.stock_quantity,
+          status: product.status,
+          categoryName: product.category?.name || 'Uncategorized',
+          productImages: product.product_images || []
+        },
+        stats: {
+          totalOrders: uniqueOrderIds.size,
+          totalUnitsSold,
+          totalRevenue,
+          uniqueCustomersCount: uniqueCustomerMap.size,
+          lastOrderedDate
+        },
+        customersWhoPurchased: Array.from(uniqueCustomerMap.values()),
+        purchaseHistory
+      });
+    } catch (err: any) {
+      console.error('Error fetching product purchase history:', err);
+      res.status(500).json({ error: err.message });
+    }
   });
 
   // Deliveries
@@ -1324,6 +1992,146 @@ async function startServer() {
       res.json(map);
     } catch {
       res.json({});
+    }
+  });
+
+  // Public Store Reviews (Homepage & Global Social Proof)
+  app.get("/api/store/reviews", async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json([]);
+      const { data, error } = await (db.from('reviews') as any)
+        .select('*, customers(full_name, email, city:phone), products(id, name, slug, price, product_images(*))')
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false })
+        .limit(20);
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err: any) {
+      console.warn('Store reviews fetch warning:', err);
+      res.json([]);
+    }
+  });
+
+  // Product-Specific Reviews
+  app.get("/api/store/products/:id/reviews", async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json([]);
+      const { id } = req.params;
+
+      const { data, error } = await (db.from('reviews') as any)
+        .select('*, customers(full_name)')
+        .eq('product_id', id)
+        .eq('status', 'approved')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err: any) {
+      console.warn('Product reviews fetch warning:', err);
+      res.json([]);
+    }
+  });
+
+  // Submit Verified Customer / Store Review
+  app.post("/api/store/reviews", async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Database connection unavailable' });
+      const {
+        product_id,
+        rating,
+        title,
+        review_text,
+        customer_name,
+        customer_email,
+        customer_id
+      } = req.body;
+
+      if (!rating || !review_text) {
+        return res.status(400).json({ error: 'Rating and review message are required' });
+      }
+
+      // Find or create customer entry
+      let targetCustomerId = customer_id;
+      const isCustomerUuid = customer_id && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customer_id);
+      
+      if (!targetCustomerId || !isCustomerUuid) {
+        const emailToUse = customer_email && customer_email.trim() ? customer_email.trim() : `reviewer_${Date.now()}@hyperdrive.bd`;
+        const { data: existingCust } = await (db.from('customers') as any)
+          .select('id')
+          .eq('email', emailToUse)
+          .maybeSingle();
+
+        if (existingCust) {
+          targetCustomerId = existingCust.id;
+        } else {
+          const { data: newCust, error: custErr } = await (db.from('customers') as any)
+            .insert({
+              firebase_uid: `review_user_${Date.now()}`,
+              full_name: customer_name || 'Verified Customer',
+              email: emailToUse
+            })
+            .select('id')
+            .single();
+
+          if (!custErr && newCust) {
+            targetCustomerId = newCust.id;
+          }
+        }
+      }
+
+      // Check if product exists if product_id provided
+      let validProductId = product_id;
+      if (product_id) {
+        const { data: prodCheck } = await (db.from('products') as any)
+          .select('id')
+          .eq('id', product_id)
+          .maybeSingle();
+        if (!prodCheck) {
+          validProductId = null;
+        }
+      }
+
+      // If no valid product_id, find first product or attach general store review
+      if (!validProductId) {
+        const { data: firstProd } = await (db.from('products') as any).select('id').limit(1).maybeSingle();
+        validProductId = firstProd?.id || null;
+      }
+
+      // Insert review (approved by default so customer sees it immediately, admin can moderate)
+      const reviewPayload: any = {
+        rating: Math.min(5, Math.max(1, parseInt(rating, 10) || 5)),
+        title: title || 'Customer Review',
+        review_text: review_text.trim(),
+        status: 'approved',
+        created_at: new Date(),
+        updated_at: new Date()
+      };
+
+      if (validProductId) reviewPayload.product_id = validProductId;
+      if (targetCustomerId) reviewPayload.customer_id = targetCustomerId;
+
+      const { data: newReview, error: revErr } = await (db.from('reviews') as any)
+        .insert(reviewPayload)
+        .select('*, customers(full_name), products(name)')
+        .single();
+
+      if (revErr) {
+        console.error('Review insert error:', revErr);
+        return res.status(400).json({ error: revErr.message });
+      }
+
+      res.json({
+        success: true,
+        review: newReview,
+        message: 'Thank you! Your verified review has been published.'
+      });
+    } catch (err: any) {
+      console.error('Submit review failure:', err);
+      res.status(500).json({ error: err.message || 'Failed to submit review' });
     }
   });
 

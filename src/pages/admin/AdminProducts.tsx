@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { Plus, Search, Edit, Trash2, ExternalLink, Eye, EyeOff, Star } from 'lucide-react';
+import { Plus, Search, Edit, Trash2, ExternalLink, Eye, EyeOff, Star, TrendingUp, History } from 'lucide-react';
 import ProductImageUploader, { ProductImageItem } from '../../components/admin/ProductImageUploader';
+import ProductPurchaseHistoryModal from '../../components/admin/ProductPurchaseHistoryModal';
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<any[]>([]);
@@ -9,6 +10,7 @@ export default function AdminProducts() {
   const [loading, setLoading] = useState(true);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingProduct, setEditingProduct] = useState<any>(null);
+  const [selectedHistoryProductId, setSelectedHistoryProductId] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   // Form state
@@ -350,6 +352,14 @@ export default function AdminProducts() {
                         </button>
                       </td>
                       <td className="py-3 text-right space-x-1.5">
+                        <button
+                          onClick={() => setSelectedHistoryProductId(prod.id)}
+                          className="inline-flex items-center gap-1 p-1.5 px-2 bg-purple-500/10 hover:bg-purple-500/20 text-purple-300 rounded-lg text-[11px] font-bold border border-purple-500/20 transition"
+                          title="View Sales & Buyer Purchase History"
+                        >
+                          <TrendingUp className="w-3.5 h-3.5" />
+                          <span className="hidden xl:inline">Sales History</span>
+                        </button>
                         <a
                           href={`/products/${prod.slug}`}
                           target="_blank"
@@ -556,6 +566,13 @@ export default function AdminProducts() {
             </form>
           </div>
         </div>
+      )}
+      {/* Product Sales & Purchase History Modal */}
+      {selectedHistoryProductId && (
+        <ProductPurchaseHistoryModal
+          productId={selectedHistoryProductId}
+          onClose={() => setSelectedHistoryProductId(null)}
+        />
       )}
     </div>
   );

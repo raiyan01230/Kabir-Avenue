@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Store, Save, Globe, Phone, Mail, MapPin, Clock } from 'lucide-react';
+import { Store, Save, Globe, Phone, Mail, MapPin, Clock, Upload, Image as ImageIcon, Check } from 'lucide-react';
 
 export default function AdminStore() {
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [loading, setLoading] = useState(true);
   const [saved, setSaved] = useState(false);
+  const [uploadingFavicon, setUploadingFavicon] = useState(false);
 
   const admin_email = JSON.parse(localStorage.getItem('admin_session') || '{}').email || 'admin@hyperdrive.bd';
 
@@ -25,6 +26,47 @@ export default function AdminStore() {
 
   const handleChange = (key: string, val: string) => {
     setSettings(prev => ({ ...prev, [key]: val }));
+  };
+
+  const handleFaviconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setUploadingFavicon(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result as string;
+        const res = await fetch('/api/admin/storage/upload', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            fileBase64: base64,
+            fileName: file.name,
+            mimeType: file.type,
+            folder: 'branding'
+          })
+        });
+        const data = await res.json();
+        if (res.ok && data.publicUrl) {
+          handleChange('store_favicon', data.publicUrl);
+          // Dynamically update document head favicon
+          const link = document.querySelector("link[rel*='icon']") || document.createElement('link');
+          (link as HTMLLinkElement).type = 'image/x-icon';
+          (link as HTMLLinkElement).rel = 'shortcut icon';
+          (link as HTMLLinkElement).href = data.publicUrl;
+          document.getElementsByTagName('head')[0].appendChild(link);
+        } else {
+          alert(data.error || 'Failed to upload favicon');
+        }
+        setUploadingFavicon(false);
+      };
+      reader.readAsDataURL(file);
+    } catch (err) {
+      console.error(err);
+      setUploadingFavicon(false);
+      alert('Error uploading favicon');
+    }
   };
 
   const handleSave = async (e: React.FormEvent) => {
@@ -53,7 +95,7 @@ export default function AdminStore() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-white">Store Identity &amp; Footer Center</h1>
-          <p className="text-xs text-slate-400 mt-1">Configure brand identity, hotline, warehouse address, and dynamic storefront footer</p>
+          <p className="text-xs text-slate-400 mt-1">Configure brand identity, dedicated favicon, hotline, warehouse address, and dynamic storefront footer</p>
         </div>
         <button
           onClick={handleSave}
@@ -71,11 +113,11 @@ export default function AdminStore() {
       )}
 
       <form onSubmit={handleSave} className="space-y-6">
-        {/* Store Identity */}
+        {/* Store Identity & Favicon */}
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
           <h2 className="text-sm font-bold text-white uppercase tracking-wider flex items-center gap-2">
             <Globe className="w-4 h-4 text-emerald-400" />
-            <span>Store Identity &amp; Branding</span>
+            <span>Store Identity &amp; Branding (Favicon &amp; Logos)</span>
           </h2>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -119,6 +161,36 @@ export default function AdminStore() {
               />
             </div>
           </div>
+
+          {/* Dedicated Favicon Upload Option */}
+          <div className="pt-3 border-t border-slate-800">
+            <label className="block text-xs font-bold text-slate-200 mb-2">Dedicated Store Favicon (Browser Icon)</label>
+            <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 bg-slate-950 p-4 rounded-xl border border-slate-800">
+              <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center overflow-hidden flex-shrink-0">
+                {settings['store_favicon'] ? (
+                  <img src={settings['store_favicon']} alt="Favicon" className="w-8 h-8 object-contain" />
+                ) : (
+                  <ImageIcon className="w-5 h-5 text-slate-500" />
+                )}
+              </div>
+              <div className="flex-1 space-y-1">
+                <p className="text-xs text-slate-300 font-medium">Upload custom .ico, .png, or .jpg favicon image</p>
+                <input
+                  type="text"
+                  placeholder="https://... or upload below"
+                  value={settings['store_favicon'] || ''}
+                  onChange={e => handleChange('store_favicon', e.target.value)}
+                  className="w-full px-3 py-1.5 bg-slate-900 border border-slate-800 rounded-lg text-white text-xs mb-2"
+                />
+                <label className="inline-flex items-center gap-2 px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl cursor-pointer transition shadow-sm">
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>{uploadingFavicon ? 'Uploading to Supabase...' : 'Upload Favicon File'}</span>
+                  <input type="file" accept="image/*" onChange={handleFaviconUpload} className="hidden" disabled={uploadingFavicon} />
+                </label>
+              </div>
+            </div>
+          </div>
+
           <div>
             <label className="block text-xs font-medium text-slate-300 mb-1">Warehouse / Head Office Address (Bangladesh) *</label>
             <input

@@ -97,8 +97,11 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setLinkTag('canonical', seo.canonicalUrl || finalOgUrl);
 
   // 6. Favicon if configured in settings
-  if (globalSettings?.['favicon_url']) {
-    setLinkTag('icon', globalSettings['favicon_url']);
+  const faviconUrl = globalSettings?.['store_favicon'] || globalSettings?.['favicon_url'];
+  if (faviconUrl) {
+    setLinkTag('icon', faviconUrl);
+    setLinkTag('shortcut icon', faviconUrl);
+    setLinkTag('apple-touch-icon', faviconUrl);
   }
 }
 

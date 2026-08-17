@@ -7,7 +7,8 @@ import { useCart } from '../context/CartContext';
 import { ensureCustomerRecord } from '../lib/customer';
 import { resolveProductImages } from '../lib/storage';
 import { applySEOMetadata } from '../hooks/useSEO';
-import { Star, ShieldCheck, Truck, RefreshCw, Heart, ShoppingBag, Zap, CheckCircle2, AlertCircle, PackageCheck, Layers } from 'lucide-react';
+import { getProductReviews, submitProductReview, ReviewItem } from '../lib/queries';
+import { Star, ShieldCheck, Truck, RefreshCw, Heart, ShoppingBag, Zap, CheckCircle2, AlertCircle, PackageCheck, Layers, ThumbsUp } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
 
 export default function ProductDetailsPage() {
@@ -97,14 +98,9 @@ export default function ProductDetailsPage() {
             canonicalUrl: window.location.href,
           });
 
-          // Fetch reviews
+          // Fetch reviews using API
           try {
-            const { data: reviewsData } = await supabase
-              .from('reviews')
-              .select('*, customers(full_name)')
-              .eq('product_id', prodData.id)
-              .order('created_at', { ascending: false });
-
+            const reviewsData = await getProductReviews(prodData.id);
             setReviews(reviewsData || []);
           } catch {
             setReviews([]);
@@ -205,48 +201,31 @@ export default function ProductDetailsPage() {
 
   const handleReviewSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) {
-      showToast('Please log in to submit a verified review', 'error');
-      navigate('/login');
+    if (!reviewText.trim()) {
+      showToast('Please enter your review details', 'error');
       return;
     }
 
     try {
       setSubmittingReview(true);
-      const customerId = await ensureCustomerRecord(
-        user.id,
-        user.email,
-        user.displayName || user.user_metadata?.full_name
-      );
-
-      const newRev = {
+      const res = await submitProductReview({
         product_id: product.id,
-        customer_id: customerId,
         rating: reviewRating,
-        title: reviewTitle.trim() || 'Verified Customer Review',
+        title: reviewTitle.trim() || 'Verified Purchase Experience',
         review_text: reviewText.trim(),
-        status: 'approved'
-      };
+        customer_name: user?.displayName || user?.user_metadata?.full_name || 'Verified Customer',
+        customer_email: user?.email || undefined
+      });
 
-      const { data: inserted, error: revErr } = await supabase
-        .from('reviews')
-        .insert(newRev)
-        .select('*')
-        .single();
-
-      if (revErr) throw revErr;
-
-      setReviews([
-        {
-          ...inserted,
-          customers: { full_name: user.user_metadata?.full_name || 'Customer' }
-        },
-        ...reviews
-      ]);
-
-      setReviewTitle('');
-      setReviewText('');
-      showToast('Review submitted successfully!');
+      if (res.success) {
+        setReviewTitle('');
+        setReviewText('');
+        showToast('Review submitted successfully!');
+        const updated = await getProductReviews(product.id);
+        setReviews(updated);
+      } else {
+        showToast(res.error || 'Failed to submit review', 'error');
+      }
     } catch (err: any) {
       console.error('Review submit error:', err);
       showToast(err.message || 'Failed to submit review', 'error');
@@ -255,7 +234,11 @@ export default function ProductDetailsPage() {
     }
   };
 
-  const categoryName = product.categories?.name || product.category?.name || 'General';
+  const categoryName = product?.categories?.name || product?.category?.name || 'General';
+  const avgRating = reviews.length > 0
+    ? (reviews.reduce((acc: number, r: any) => acc + (Number(r.rating) || 5), 0) / reviews.length).toFixed(1)
+    : '5.0';
+  const roundedStars = Math.round(Number(avgRating));
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-6xl">
@@ -351,11 +334,14 @@ export default function ProductDetailsPage() {
           <div className="flex items-center gap-2 pb-4 border-b border-slate-100">
             <div className="flex items-center text-amber-400">
               {[...Array(5)].map((_, i) => (
-                <Star key={i} className="w-4 h-4 fill-amber-400 text-amber-400" />
+                <Star
+                  key={i}
+                  className={`w-4 h-4 ${i < roundedStars ? 'fill-amber-400 text-amber-400' : 'text-slate-300'}`}
+                />
               ))}
             </div>
-            <span className="text-xs font-bold text-slate-700">5.0</span>
-            <span className="text-xs text-slate-400">({reviews.length} verified ratings)</span>
+            <span className="text-xs font-bold text-slate-700">{avgRating}</span>
+            <span className="text-xs text-slate-400">({reviews.length} verified {reviews.length === 1 ? 'rating' : 'ratings'})</span>
           </div>
 
           {/* Price & Stock */}

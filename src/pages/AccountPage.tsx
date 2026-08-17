@@ -22,6 +22,7 @@ import { BANGLADESH_DIVISIONS } from '../data/bangladeshLocations';
 import { supabase } from '../lib/supabase';
 import { addItemToCustomerCart } from '../lib/cart';
 import { ensureCustomerRecord } from '../lib/customer';
+import { resolveOrderItemImage, resolveOrderItemName, resolveOrderItemSku } from '../lib/orderItemHelper';
 
 interface CustomerProfile {
   fullName: string;
@@ -94,7 +95,20 @@ export default function AccountPage() {
         if (customerId && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(customerId)) {
           const { data, error } = await supabase
             .from('orders')
-            .select('*, order_items(*)')
+            .select(`
+              *,
+              order_items(
+                *,
+                products(
+                  id,
+                  name,
+                  sku,
+                  slug,
+                  price,
+                  product_images(id, image_url, storage_path, is_primary)
+                )
+              )
+            `)
             .eq('customer_id', customerId)
             .order('created_at', { ascending: false });
 
@@ -542,42 +556,94 @@ export default function AccountPage() {
                   </div>
                 ) : (
                   <div className="space-y-4">
-                    {orders.map((order) => (
-                      <div
-                        key={order.id}
-                        className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl hover:border-slate-300 transition space-y-4"
-                      >
-                        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
-                          <div>
-                            <span className="text-xs font-bold text-slate-900">{order.order_number}</span>
-                            <span className="text-[11px] text-slate-500 ml-3">
-                              {new Date(order.created_at).toLocaleDateString('en-GB', {
-                                day: 'numeric',
-                                month: 'short',
-                                year: 'numeric',
-                              })}
-                            </span>
-                          </div>
-                          <div className="flex items-center gap-3">
-                            {getStatusBadge(order.order_status)}
-                            <span className="font-extrabold text-slate-900 text-sm">৳{Number(order.total).toLocaleString()}</span>
-                          </div>
-                        </div>
+                    {orders.map((order) => {
+                      const items = order.order_items || [];
+                      const totalUnits = items.reduce((s: number, it: any) => s + Number(it.quantity || 1), 0);
 
-                        <div className="flex items-center justify-between">
-                          <span className="text-xs text-slate-500">
-                            {order.order_items?.length || 1} Item(s) • {order.payment_method?.toUpperCase()}
-                          </span>
-                          <Link
-                            to={`/track/${order.order_number}`}
-                            className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 hover:text-slate-700 bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-xs"
-                          >
-                            <span>Live Tracking</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </Link>
+                      return (
+                        <div
+                          key={order.id}
+                          className="p-5 bg-slate-50/70 border border-slate-200 rounded-2xl hover:border-slate-300 transition space-y-4"
+                        >
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-200/80 pb-3">
+                            <div>
+                              <span className="text-xs font-bold text-slate-900 font-mono">{order.order_number}</span>
+                              <span className="text-[11px] text-slate-500 ml-3">
+                                {new Date(order.created_at).toLocaleDateString('en-GB', {
+                                  day: 'numeric',
+                                  month: 'short',
+                                  year: 'numeric',
+                                })}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              {getStatusBadge(order.order_status)}
+                              <span className="font-extrabold text-slate-900 text-sm">৳{Number(order.total).toLocaleString()}</span>
+                            </div>
+                          </div>
+
+                          {/* Ordered Items with Thumbnails */}
+                          <div className="space-y-2.5">
+                            {items.map((it: any, itIdx: number) => {
+                              const img = resolveOrderItemImage(it);
+                              const name = resolveOrderItemName(it);
+                              const unitPrice = Number(it.unit_price || 0);
+                              const qty = Number(it.quantity || 1);
+                              const slug = it.products?.slug;
+
+                              return (
+                                <div key={it.id || itIdx} className="flex items-center justify-between gap-3 text-xs bg-white p-2.5 rounded-xl border border-slate-200/60">
+                                  <div className="flex items-center gap-2.5 min-w-0">
+                                    <div className="w-10 h-10 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
+                                      <img
+                                        src={img}
+                                        alt={name}
+                                        className="w-full h-full object-cover"
+                                        referrerPolicy="no-referrer"
+                                        onError={(e) => {
+                                          (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=100&auto=format&fit=crop&q=80';
+                                        }}
+                                      />
+                                    </div>
+                                    <div className="min-w-0">
+                                      <div className="font-bold text-slate-800 truncate max-w-[220px]">
+                                        {slug ? (
+                                          <Link to={`/products/${slug}`} className="hover:text-emerald-600 transition">
+                                            {name}
+                                          </Link>
+                                        ) : (
+                                          name
+                                        )}
+                                      </div>
+                                      <div className="text-[10px] text-slate-400">
+                                        ৳{unitPrice.toLocaleString()} &times; {qty}
+                                      </div>
+                                    </div>
+                                  </div>
+
+                                  <div className="font-extrabold text-slate-900 text-xs">
+                                    ৳{(unitPrice * qty).toLocaleString()}
+                                  </div>
+                                </div>
+                              );
+                            })}
+                          </div>
+
+                          <div className="flex items-center justify-between pt-1">
+                            <span className="text-xs text-slate-500">
+                              {items.length} Item{items.length === 1 ? '' : 's'} ({totalUnits} units) &bull; {order.payment_method?.toUpperCase()}
+                            </span>
+                            <Link
+                              to={`/track/${order.order_number}`}
+                              className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-900 hover:text-slate-700 bg-white px-3.5 py-1.5 rounded-xl border border-slate-200 shadow-xs"
+                            >
+                              <span>Live Tracking</span>
+                              <ChevronRight className="w-3.5 h-3.5" />
+                            </Link>
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>

@@ -3,8 +3,10 @@ import { useNavigate, Link } from 'react-router-dom';
 import {
   ArrowLeft, Search, Plus, Trash2, ShoppingBag, User, Truck,
   DollarSign, Tag, CheckCircle, AlertCircle, Printer, ShieldCheck,
-  Package, Sparkles, Phone, Mail, MapPin, Layers, Percent
+  Package, Sparkles, Phone, Mail, MapPin, Layers, Percent, Download
 } from 'lucide-react';
+import { downloadOrdersHtml } from '../../lib/invoiceDownload';
+import { getStoreSettings } from '../../lib/queries';
 
 interface SelectedProductItem {
   productId: string;
@@ -68,9 +70,14 @@ export default function AdminVIPOrderCreate() {
   const [submitting, setSubmitting] = useState(false);
   const [createdOrder, setCreatedOrder] = useState<any>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [storeSettings, setStoreSettings] = useState<Record<string, string>>({});
 
   // Load products, categories, and customers
   useEffect(() => {
+    getStoreSettings().then(settings => {
+      if (settings) setStoreSettings(settings);
+    });
+
     async function loadData() {
       try {
         setLoadingData(true);
@@ -271,7 +278,15 @@ export default function AdminVIPOrderCreate() {
   };
 
   const handlePrint = () => {
-    window.print();
+    if (createdOrder) {
+      navigate(`/admin/orders/${createdOrder.id || createdOrder.order_number}/print`);
+    }
+  };
+
+  const handleDownload = () => {
+    if (createdOrder) {
+      downloadOrdersHtml([createdOrder], 'invoice', storeSettings);
+    }
   };
 
   const handleResetForm = () => {
@@ -346,17 +361,28 @@ export default function AdminVIPOrderCreate() {
                 <p className="text-xs text-emerald-400 font-mono">Order Number: #{createdOrder.order_number}</p>
               </div>
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
+                type="button"
+                onClick={handleDownload}
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold rounded-xl transition flex items-center gap-1.5 border border-slate-700 cursor-pointer"
+                title="Download invoice file directly"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Invoice</span>
+              </button>
+              <button
+                type="button"
                 onClick={handlePrint}
-                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-2 border border-slate-700"
+                className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs font-bold rounded-xl transition flex items-center gap-2 border border-slate-700 cursor-pointer"
               >
                 <Printer className="w-4 h-4 text-emerald-400" />
                 <span>Print Invoice</span>
               </button>
               <button
+                type="button"
                 onClick={handleResetForm}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20"
+                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition shadow-lg shadow-emerald-600/20 cursor-pointer"
               >
                 + Create Another Order
               </button>

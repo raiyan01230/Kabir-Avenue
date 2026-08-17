@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { CheckCircle2, Clock, Truck, Package, ArrowLeft, ShieldCheck, MapPin, Phone, Search, ChevronRight, AlertCircle, ShoppingBag, Copy, Check } from 'lucide-react';
+import { CheckCircle2, Clock, Truck, Package, ArrowLeft, ShieldCheck, MapPin, Phone, Search, ChevronRight, AlertCircle, ShoppingBag, Copy, Check, ExternalLink } from 'lucide-react';
+import { resolveOrderItemImage, resolveOrderItemName, resolveOrderItemSku } from '../lib/orderItemHelper';
 
 interface OrderDetails {
   id: string;
@@ -71,10 +72,20 @@ export default function TrackOrderPage() {
         return;
       }
 
-      // 2. Fetch items
+      // 2. Fetch items with product relation and images
       const { data: itemsData } = await supabase
         .from('order_items')
-        .select('*')
+        .select(`
+          *,
+          products(
+            id,
+            name,
+            sku,
+            slug,
+            price,
+            product_images(id, image_url, storage_path, is_primary)
+          )
+        `)
         .eq('order_id', orderData.id);
 
       // 3. Fetch shipping address
@@ -311,18 +322,51 @@ export default function TrackOrderPage() {
                   Package Items ({order.orderItems?.length || 0})
                 </h3>
 
-                <div className="divide-y divide-slate-100 max-h-60 overflow-y-auto pr-1">
-                  {order.orderItems?.map((item) => (
-                    <div key={item.id} className="py-2.5 first:pt-0 last:pb-0 flex items-center justify-between gap-3 text-xs">
-                      <div>
-                        <p className="font-bold text-slate-900">{item.product_name_snapshot}</p>
-                        <p className="text-slate-500">Qty: {item.quantity} &times; ৳{Number(item.unit_price).toLocaleString()}</p>
+                <div className="divide-y divide-slate-100 max-h-80 overflow-y-auto pr-1">
+                  {order.orderItems?.map((item: any, itIdx: number) => {
+                    const img = resolveOrderItemImage(item);
+                    const name = resolveOrderItemName(item);
+                    const unitPrice = Number(item.unit_price || 0);
+                    const qty = Number(item.quantity || 1);
+                    const lineSub = Number(item.subtotal || unitPrice * qty);
+                    const slug = item.products?.slug;
+
+                    return (
+                      <div key={item.id || itIdx} className="py-3 first:pt-0 last:pb-0 flex items-center justify-between gap-3 text-xs">
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <div className="w-11 h-11 rounded-lg bg-slate-100 border border-slate-200 overflow-hidden flex-shrink-0">
+                            <img
+                              src={img}
+                              alt={name}
+                              className="w-full h-full object-cover"
+                              referrerPolicy="no-referrer"
+                              onError={(e) => {
+                                (e.target as HTMLImageElement).src = 'https://images.unsplash.com/photo-1550745165-9bc0b252726f?w=100&auto=format&fit=crop&q=80';
+                              }}
+                            />
+                          </div>
+                          <div className="min-w-0">
+                            <p className="font-bold text-slate-900 truncate max-w-[180px]">
+                              {slug ? (
+                                <Link to={`/products/${slug}`} className="hover:text-emerald-600 transition">
+                                  {name}
+                                </Link>
+                              ) : (
+                                name
+                              )}
+                            </p>
+                            <p className="text-slate-500 text-[11px]">
+                              Qty: {qty} &times; ৳{unitPrice.toLocaleString()}
+                            </p>
+                          </div>
+                        </div>
+
+                        <span className="font-extrabold text-slate-900 text-xs flex-shrink-0">
+                          ৳{lineSub.toLocaleString()}
+                        </span>
                       </div>
-                      <span className="font-bold text-slate-900">
-                        ৳{Number(item.subtotal || Number(item.unit_price) * item.quantity).toLocaleString()}
-                      </span>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
 
