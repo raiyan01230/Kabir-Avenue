@@ -63,7 +63,12 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   // Infer title from path if seo.title is not explicitly provided
   let inferredTitle = seo?.title;
   if (!inferredTitle) {
-    const path = window.location.pathname;
+    let path = window.location.pathname;
+    if (window.location.hash && window.location.hash.includes('#')) {
+      const hashPart = window.location.hash.split('#')[1] || '';
+      path = hashPart.split('?')[0] || '/';
+    }
+    
     if (path === '/' || path === '' || path === '/index.html') {
       inferredTitle = 'Home';
     } else if (path.includes('/shop') || path.includes('/products')) {
