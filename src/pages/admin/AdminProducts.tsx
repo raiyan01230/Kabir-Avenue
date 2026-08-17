@@ -21,6 +21,7 @@ export default function AdminProducts() {
   const [comparePrice, setComparePrice] = useState('');
   const [stockQuantity, setStockQuantity] = useState('10');
   const [categoryId, setCategoryId] = useState('');
+  const [newCategoryName, setNewCategoryName] = useState('');
   const [status, setStatus] = useState<'active' | 'draft' | 'archived'>('active');
   const [featured, setFeatured] = useState(false);
   const [shortDescription, setShortDescription] = useState('');
@@ -71,6 +72,7 @@ export default function AdminProducts() {
     setComparePrice('');
     setStockQuantity('15');
     setCategoryId(categories[0]?.id || '');
+    setNewCategoryName('');
     setStatus('active');
     setFeatured(false);
     setShortDescription('');
@@ -88,6 +90,7 @@ export default function AdminProducts() {
     setComparePrice(prod.compare_price?.toString() || '');
     setStockQuantity(prod.stock_quantity?.toString() || '0');
     setCategoryId(prod.category_id || '');
+    setNewCategoryName('');
     setStatus(prod.status === 'draft' || prod.status === 'archived' ? prod.status : 'active');
     setFeatured(Boolean(prod.featured));
     setShortDescription(prod.short_description || '');
@@ -159,6 +162,39 @@ export default function AdminProducts() {
 
     setIsSaving(true);
 
+    let finalCategoryId = categoryId;
+    if (categoryId === 'CREATE_NEW') {
+      if (!newCategoryName.trim()) {
+        alert('Please enter a name for the new category.');
+        setIsSaving(false);
+        return;
+      }
+      try {
+        const catRes = await fetch('/api/admin/categories', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            name: newCategoryName.trim(),
+            slug: newCategoryName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
+            admin_email
+          })
+        });
+        const catData = await catRes.json();
+        if (catRes.ok && catData.category) {
+          finalCategoryId = catData.category.id;
+          fetchCategories();
+        } else {
+          alert(catData.error || 'Failed to create new category');
+          setIsSaving(false);
+          return;
+        }
+      } catch (err: any) {
+        alert(`Failed to create category: ${err.message}`);
+        setIsSaving(false);
+        return;
+      }
+    }
+
     const generatedSlug = slug.trim() || name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
     const generatedSku = sku.trim() || `SKU-${Date.now().toString().slice(-6)}`;
 
@@ -169,7 +205,7 @@ export default function AdminProducts() {
       price: parseFloat(price),
       compare_price: comparePrice && !isNaN(parseFloat(comparePrice)) ? parseFloat(comparePrice) : null,
       stock_quantity: parseInt(stockQuantity, 10) || 0,
-      category_id: categoryId || null,
+      category_id: finalCategoryId || null,
       status: status || 'active',
       featured: Boolean(featured),
       short_description: shortDescription.trim() || null,
@@ -481,13 +517,24 @@ export default function AdminProducts() {
                   <select
                     value={categoryId}
                     onChange={(e) => setCategoryId(e.target.value)}
-                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
+                    className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500 mb-2"
                   >
-                    <option value="">Select Category</option>
+                    <option value="">Select Existing Category</option>
+                    <option value="CREATE_NEW">+ Create New Category...</option>
                     {categories.map(c => (
                       <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </select>
+                  {categoryId === 'CREATE_NEW' && (
+                    <input
+                      type="text"
+                      required
+                      placeholder="Enter new category name..."
+                      value={newCategoryName}
+                      onChange={(e) => setNewCategoryName(e.target.value)}
+                      className="w-full px-3 py-2 bg-slate-950 border border-emerald-500 rounded-xl text-white text-xs focus:outline-none"
+                    />
+                  )}
                 </div>
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Storefront Status</label>

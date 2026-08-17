@@ -142,6 +142,21 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
 }
 
 /**
+ * Inject Schema.org JSON-LD structured data for Google search ranking & rich snippets
+ */
+export function injectStructuredData(schemaObj: object) {
+  if (typeof document === 'undefined') return;
+  let scriptEl = document.querySelector('script#structured-data');
+  if (!scriptEl) {
+    scriptEl = document.createElement('script');
+    scriptEl.id = 'structured-data';
+    scriptEl.setAttribute('type', 'application/ld+json');
+    document.head.appendChild(scriptEl);
+  }
+  scriptEl.textContent = JSON.stringify(schemaObj);
+}
+
+/**
  * Custom React hook for dynamic database-backed SEO
  */
 export function useSEO(customSEO?: SEOProps) {

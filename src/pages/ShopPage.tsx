@@ -20,6 +20,8 @@ import { getFilteredCatalog, getCategories, Product, Category } from '../lib/que
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
+import ProductCard from '../components/ProductCard';
+import { useSEO, injectStructuredData } from '../hooks/useSEO';
 
 export default function ShopPage() {
   const [searchParams, setSearchParams] = useSearchParams();
@@ -48,6 +50,28 @@ export default function ShopPage() {
   const { isInWishlist, toggleWishlist } = useWishlist();
   const { addToCart, setBuyNow } = useCart();
   const { user } = useAuth();
+
+  // Apply SEO and Google Structured Data (ItemList)
+  useSEO({
+    title: selectedCategory !== 'all' ? `Category: ${selectedCategory}` : 'Shop All Products & Hardware',
+    description: 'Explore our catalog of genuine enthusiast PC hardware, mechanical keyboards, graphics cards, and gaming accessories in Bangladesh.',
+    canonicalUrl: window.location.href,
+  });
+
+  useEffect(() => {
+    if (products.length > 0) {
+      injectStructuredData({
+        '@context': 'https://schema.org',
+        '@type': 'ItemList',
+        itemListElement: products.map((p, idx) => ({
+          '@type': 'ListItem',
+          position: idx + 1,
+          url: `${window.location.origin}/products/${p.slug || p.id}`,
+          name: p.name,
+        })),
+      });
+    }
+  }, [products]);
 
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
@@ -431,91 +455,9 @@ export default function ShopPage() {
             ) : viewMode === 'grid' ? (
               /* Grid View */
               <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
-                {products.map((product) => {
-                  const inWishlist = isInWishlist(product.id);
-                  const isProcessing = actionLoadingId === product.id;
-                  const discountPct = product.comparePrice && Number(product.comparePrice) > Number(product.price)
-                    ? Math.round(((Number(product.comparePrice) - Number(product.price)) / Number(product.comparePrice)) * 100)
-                    : null;
-
-                  return (
-                    <div
-                      key={product.id}
-                      className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-lg transition flex flex-col justify-between group"
-                    >
-                      <div className="p-6">
-                        <div className="flex items-start justify-between gap-3 mb-3">
-                          <div className="flex items-center gap-1.5">
-                            <span className="inline-block px-2.5 py-0.5 bg-slate-100 text-slate-800 text-[11px] font-semibold rounded-full">
-                              In Stock ({product.stockQuantity || 10})
-                            </span>
-                            {discountPct && (
-                              <span className="inline-block px-2 py-0.5 bg-rose-50 text-rose-600 text-[10px] font-bold rounded-full">
-                                Save {discountPct}%
-                              </span>
-                            )}
-                          </div>
-
-                          {/* Wishlist Button */}
-                          <button
-                            type="button"
-                            onClick={(e) => handleWishlistToggle(e, product)}
-                            className={`p-2 rounded-full transition ${
-                              inWishlist
-                                ? 'bg-rose-50 text-rose-600 shadow-sm'
-                                : 'bg-slate-100 text-slate-400 hover:text-rose-600 hover:bg-rose-50'
-                            }`}
-                          >
-                            <Heart
-                              className={`w-4 h-4 transition-transform active:scale-125 ${
-                                inWishlist ? 'fill-rose-600 text-rose-600' : ''
-                              }`}
-                            />
-                          </button>
-                        </div>
-
-                        <Link to={`/products/${product.slug}`} className="block">
-                          <h3 className="font-bold text-slate-900 text-base mb-1 group-hover:text-slate-700 transition">
-                            {product.name}
-                          </h3>
-                        </Link>
-                        <p className="text-xs text-slate-500 line-clamp-2 mb-4 leading-relaxed">
-                          {product.description || 'Authentic quality, Bangladesh warranty supported, ready for immediate dispatch.'}
-                        </p>
-
-                        <div className="flex items-baseline gap-2 mb-4">
-                          <span className="text-xl font-black text-slate-900">৳{Number(product.price).toLocaleString()}</span>
-                          {product.comparePrice && (
-                            <span className="text-xs text-slate-400 line-through">
-                              ৳{Number(product.comparePrice).toLocaleString()}
-                            </span>
-                          )}
-                        </div>
-                      </div>
-
-                      <div className="p-4 bg-slate-50 border-t border-slate-100 grid grid-cols-2 gap-2">
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={(e) => handleAddToCart(e, product)}
-                          className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-white border border-slate-300 text-slate-800 hover:bg-slate-100 text-xs font-bold rounded-xl transition disabled:opacity-60 cursor-pointer"
-                        >
-                          <ShoppingBag className="w-3.5 h-3.5" />
-                          <span>{isProcessing ? 'Adding...' : 'Add to Cart'}</span>
-                        </button>
-                        <button
-                          type="button"
-                          disabled={isProcessing}
-                          onClick={(e) => handleBuyNow(e, product)}
-                          className="flex items-center justify-center gap-1.5 py-2.5 px-3 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition shadow-sm disabled:opacity-60 cursor-pointer"
-                        >
-                          <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-                          <span>Buy Now</span>
-                        </button>
-                      </div>
-                    </div>
-                  );
-                })}
+                {products.map((product) => (
+                  <ProductCard key={product.id} product={product} />
+                ))}
               </div>
             ) : (
               /* List View */

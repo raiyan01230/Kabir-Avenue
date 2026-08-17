@@ -6,7 +6,7 @@ import { useWishlist } from '../context/WishlistContext';
 import { useCart } from '../context/CartContext';
 import { ensureCustomerRecord } from '../lib/customer';
 import { resolveProductImages } from '../lib/storage';
-import { applySEOMetadata } from '../hooks/useSEO';
+import { applySEOMetadata, injectStructuredData } from '../hooks/useSEO';
 import { getProductReviews, submitProductReview, ReviewItem } from '../lib/queries';
 import { Star, ShieldCheck, Truck, RefreshCw, Heart, ShoppingBag, Zap, CheckCircle2, AlertCircle, PackageCheck, Layers, ThumbsUp } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
@@ -96,6 +96,31 @@ export default function ProductDetailsPage() {
             ogImage: images[0],
             ogType: 'product',
             canonicalUrl: window.location.href,
+          });
+
+          // Inject Schema.org Product structured data
+          injectStructuredData({
+            '@context': 'https://schema.org/',
+            '@type': 'Product',
+            name: prodData.name,
+            image: images,
+            description: prodData.short_description || prodData.description || '',
+            sku: prodData.sku || prodData.id,
+            brand: {
+              '@type': 'Brand',
+              name: 'HYPERDRIVE'
+            },
+            offers: {
+              '@type': 'Offer',
+              url: window.location.href,
+              priceCurrency: 'BDT',
+              price: prodData.price,
+              availability: (prodData.stock_quantity ?? 10) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+              seller: {
+                '@type': 'Organization',
+                name: 'HYPERDRIVE BD'
+              }
+            }
           });
 
           // Fetch reviews using API
