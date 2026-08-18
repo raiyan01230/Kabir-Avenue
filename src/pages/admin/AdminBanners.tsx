@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useRef } from 'react';
-import { Image, Plus, Trash2, Upload, Loader2, Edit2, Eye, EyeOff, CheckCircle2, ArrowUpDown } from 'lucide-react';
+import { Image as ImageIcon, Plus, Trash2, Upload, Loader2, Edit2, Eye, EyeOff, CheckCircle2, Crop, Sparkles, ArrowRight, ZoomIn, ZoomOut, Move, RotateCcw, Check } from 'lucide-react';
 
 interface BannerItem {
   id: string;
@@ -26,11 +26,24 @@ export default function AdminBanners() {
   const [sortOrder, setSortOrder] = useState('0');
   const [isActive, setIsActive] = useState(true);
 
+  // Cropping tool state
+  const [isCropModalOpen, setIsCropModalOpen] = useState(false);
+  const [rawImageSource, setRawImageSource] = useState<string | null>(null);
+  const [cropZoom, setCropZoom] = useState(1);
+  const [cropOffsetX, setCropOffsetX] = useState(0);
+  const [cropOffsetY, setCropOffsetY] = useState(0);
+  const [isCropping, setIsCropping] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
+
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const cropImageRef = useRef<HTMLImageElement | null>(null);
+
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const admin_email = JSON.parse(localStorage.getItem('admin_session') || '{}').email || 'admin@hyperdrive.bd';
+  const admin_email = JSON.parse(localStorage.getItem('admin_session') || '{}').email || 'admin@shmgadgetzone.com';
 
   const fetchBanners = () => {
     fetch('/api/admin/banners')
@@ -68,6 +81,27 @@ export default function AdminBanners() {
     setIsModalOpen(true);
   };
 
+  // Open cropper for an existing or newly uploaded image
+  const startCropImage = (sourceUrl: string) => {
+    setRawImageSource(sourceUrl);
+    setCropZoom(1);
+    setCropOffsetX(0);
+    setCropOffsetY(0);
+
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      cropImageRef.current = img;
+      setIsCropModalOpen(true);
+    };
+    img.onerror = () => {
+      // If cross-origin fails, still open and attempt
+      cropImageRef.current = img;
+      setIsCropModalOpen(true);
+    };
+    img.src = sourceUrl;
+  };
+
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -77,45 +111,156 @@ export default function AdminBanners() {
       return;
     }
 
-    if (file.size > 10 * 1024 * 1024) {
-      setUploadError('Image file must be less than 10MB.');
+    if (file.size > 15 * 1024 * 1024) {
+      setUploadError('Image file must be less than 15MB.');
       return;
     }
 
-    setUploading(true);
+    setUploadError(null);
+
+    const reader = new FileReader();
+    reader.readAsDataURL(file);
+    reader.onload = () => {
+      const base64 = reader.result as string;
+      // Open the crop tool immediately so admin can select the exact part of the image
+      startCropImage(base64);
+    };
+    reader.onerror = () => {
+      setUploadError('Failed to read image file');
+    };
+  };
+
+  // Draw crop preview on canvas
+  useEffect(() => {
+    if (!isCropModalOpen || !canvasRef.current || !cropImageRef.current) return;
+    const canvas = canvasRef.current;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+
+    const img = cropImageRef.current;
+    const targetWidth = canvas.width; // 1200
+    const targetHeight = canvas.height; // 500
+
+    ctx.clearRect(0, 0, targetWidth, targetHeight);
+    ctx.fillStyle = '#020617';
+    ctx.fillRect(0, 0, targetWidth, targetHeight);
+
+    // Calculate scaling to cover 1200x500
+    const imgAspect = img.width / img.height;
+    const targetAspect = targetWidth / targetHeight;
+
+    let baseWidth, baseHeight;
+    if (imgAspect > targetAspect) {
+      baseHeight = targetHeight;
+      baseWidth = targetHeight * imgAspect;
+    } else {
+      baseWidth = targetWidth;
+      baseHeight = targetWidth / imgAspect;
+    }
+
+    const scaledWidth = baseWidth * cropZoom;
+    const scaledHeight = baseHeight * cropZoom;
+
+    // Center plus offsets
+    const x = (targetWidth - scaledWidth) / 2 + cropOffsetX;
+    const y = (targetHeight - scaledHeight) / 2 + cropOffsetY;
+
+    ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
+  }, [isCropModalOpen, cropZoom, cropOffsetX, cropOffsetY, rawImageSource]);
+
+  // Handle Dragging / Panning on canvas
+  const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    setIsDragging(true);
+    setDragStart({ x: e.clientX - cropOffsetX, y: e.clientY - cropOffsetY });
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLCanvasElement>) => {
+    if (!isDragging) return;
+    setCropOffsetX(e.clientX - dragStart.x);
+    setCropOffsetY(e.clientY - dragStart.y);
+  };
+
+  const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Apply Crop: export canvas to high-res WebP/JPEG and upload to Supabase
+  const applyCropAndUpload = async () => {
+    if (!canvasRef.current) return;
+    setIsCropping(true);
     setUploadError(null);
 
     try {
-      const reader = new FileReader();
-      reader.readAsDataURL(file);
-      reader.onload = async () => {
-        const base64 = reader.result as string;
-        const res = await fetch('/api/admin/storage/upload', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            fileBase64: base64,
-            fileName: file.name,
-            mimeType: file.type,
-            folder: 'banners'
-          })
-        });
+      const croppedBase64 = canvasRef.current.toDataURL('image/jpeg', 0.92);
 
-        const data = await res.json();
-        if (res.ok && data.publicUrl) {
-          setImageUrl(data.publicUrl);
-        } else {
-          setUploadError(data.error || 'Failed to upload banner image');
-        }
-        setUploading(false);
-      };
-      reader.onerror = () => {
-        setUploadError('Failed to read image file');
-        setUploading(false);
-      };
+      const res = await fetch('/api/admin/storage/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          fileBase64: croppedBase64,
+          fileName: `banner-crop-${Date.now()}.jpg`,
+          mimeType: 'image/jpeg',
+          folder: 'banners'
+        })
+      });
+
+      const data = await res.json();
+      if (res.ok && data.publicUrl) {
+        setImageUrl(data.publicUrl);
+        setIsCropModalOpen(false);
+      } else {
+        // Fallback to the local cropped base64 if storage is unreachable
+        setImageUrl(croppedBase64);
+        setIsCropModalOpen(false);
+      }
     } catch (err: any) {
-      setUploadError(err.message || 'Upload failed');
-      setUploading(false);
+      if (canvasRef.current) {
+        setImageUrl(canvasRef.current.toDataURL('image/jpeg', 0.92));
+      }
+      setIsCropModalOpen(false);
+    } finally {
+      setIsCropping(false);
+    }
+  };
+
+  // Position presets
+  const applyPreset = (preset: 'top' | 'center' | 'bottom' | 'left' | 'right') => {
+    if (!canvasRef.current || !cropImageRef.current) return;
+    const canvas = canvasRef.current;
+    const img = cropImageRef.current;
+    const targetWidth = canvas.width;
+    const targetHeight = canvas.height;
+
+    const imgAspect = img.width / img.height;
+    const targetAspect = targetWidth / targetHeight;
+
+    let baseWidth, baseHeight;
+    if (imgAspect > targetAspect) {
+      baseHeight = targetHeight;
+      baseWidth = targetHeight * imgAspect;
+    } else {
+      baseWidth = targetWidth;
+      baseHeight = targetWidth / imgAspect;
+    }
+
+    const scaledWidth = baseWidth * cropZoom;
+    const scaledHeight = baseHeight * cropZoom;
+
+    if (preset === 'center') {
+      setCropOffsetX(0);
+      setCropOffsetY(0);
+    } else if (preset === 'top') {
+      setCropOffsetX(0);
+      setCropOffsetY((scaledHeight - targetHeight) / 2);
+    } else if (preset === 'bottom') {
+      setCropOffsetX(0);
+      setCropOffsetY(-(scaledHeight - targetHeight) / 2);
+    } else if (preset === 'left') {
+      setCropOffsetX((scaledWidth - targetWidth) / 2);
+      setCropOffsetY(0);
+    } else if (preset === 'right') {
+      setCropOffsetX(-(scaledWidth - targetWidth) / 2);
+      setCropOffsetY(0);
     }
   };
 
@@ -126,13 +271,13 @@ export default function AdminBanners() {
       return;
     }
 
+    // Only send valid database columns to avoid schema cache errors
     const payload = {
-      title,
-      subtitle,
+      title: title.trim() || null,
+      subtitle: subtitle.trim() || null,
       image_url: imageUrl,
-      storage_path: imageUrl,
-      button_text: buttonText || 'Shop Now',
-      button_link: buttonLink || '/shop',
+      button_text: buttonText.trim() || 'Shop Now',
+      button_link: buttonLink.trim() || '/shop',
       sort_order: parseInt(sortOrder, 10) || 0,
       is_active: isActive,
       admin_email
@@ -177,7 +322,7 @@ export default function AdminBanners() {
       <div className="flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-extrabold text-white">Homepage Banners</h1>
-          <p className="text-xs text-slate-400 mt-1">Manage dynamic promotional carousel banners on the customer storefront</p>
+          <p className="text-xs text-slate-400 mt-1">Manage promotional banners, crop framing, and live previews on the customer storefront</p>
         </div>
         <button
           onClick={openCreateModal}
@@ -194,7 +339,7 @@ export default function AdminBanners() {
           return (
             <div key={b.id} className={`bg-slate-900 border rounded-2xl overflow-hidden p-4 flex flex-col justify-between transition ${active ? 'border-slate-800' : 'border-slate-800/50 opacity-60'}`}>
               <div>
-                <div className="relative h-44 rounded-xl overflow-hidden mb-3 bg-slate-950 border border-slate-800/80">
+                <div className="relative h-44 rounded-xl overflow-hidden mb-3 bg-slate-950 border border-slate-800/80 group">
                   <img src={b.image_url} alt={b.title || 'Banner'} className="w-full h-full object-cover" />
                   <div className="absolute top-2 left-2 flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-slate-950/80 backdrop-blur-md text-[10px] font-bold text-white border border-slate-800">
                     <span>Order: {b.sort_order ?? 0}</span>
@@ -243,7 +388,7 @@ export default function AdminBanners() {
 
         {banners.length === 0 && (
           <div className="col-span-full py-16 text-center bg-slate-900 border border-slate-800 rounded-2xl">
-            <Image className="w-12 h-12 text-slate-600 mx-auto mb-3" />
+            <ImageIcon className="w-12 h-12 text-slate-600 mx-auto mb-3" />
             <h3 className="text-white font-bold text-sm">No homepage banners found</h3>
             <p className="text-xs text-slate-400 mt-1 mb-4">Create your first dynamic banner to display on the storefront carousel.</p>
             <button onClick={openCreateModal} className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2">
@@ -254,12 +399,18 @@ export default function AdminBanners() {
         )}
       </div>
 
+      {/* Main Banner Add / Edit Modal */}
       {isModalOpen && (
         <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-lg w-full p-6 my-8">
-            <h2 className="text-lg font-bold text-white mb-4">
-              {editingBannerId ? 'Edit Homepage Banner' : 'Add Homepage Banner'}
-            </h2>
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 my-8 space-y-5">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                <ImageIcon className="w-5 h-5 text-emerald-400" />
+                <span>{editingBannerId ? 'Edit Homepage Banner' : 'Add Homepage Banner'}</span>
+              </h2>
+              <span className="text-[11px] text-slate-400 font-mono">Recommended: 1200 × 500 px</span>
+            </div>
+
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
@@ -289,7 +440,7 @@ export default function AdminBanners() {
                   type="text"
                   value={subtitle}
                   onChange={e => setSubtitle(e.target.value)}
-                  placeholder="e.g. Up to 50% off on all trending gadgets"
+                  placeholder="e.g. 20% off with promo code 'RIYA'"
                   className="w-full px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
                 />
               </div>
@@ -317,50 +468,121 @@ export default function AdminBanners() {
                 </div>
               </div>
 
-              <div>
-                <label className="block text-xs font-medium text-slate-300 mb-1">Banner Image (Recommended: 1200x500px)</label>
+              {/* Banner Image & Cropping Section */}
+              <div className="space-y-3 pt-1">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-200">
+                    Banner Image &amp; Crop Selection
+                  </label>
+                  {imageUrl && (
+                    <button
+                      type="button"
+                      onClick={() => startCropImage(imageUrl)}
+                      className="px-2.5 py-1 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
+                    >
+                      <Crop className="w-3.5 h-3.5" />
+                      <span>Crop / Select Part of Image</span>
+                    </button>
+                  )}
+                </div>
+
                 <input type="file" ref={fileInputRef} onChange={handleFileUpload} accept="image/*" className="hidden" />
 
                 {imageUrl ? (
-                  <div className="relative h-36 rounded-xl overflow-hidden bg-slate-950 border border-slate-800 mb-2">
-                    <img src={imageUrl} alt="Banner preview" className="w-full h-full object-cover" />
-                    <button
-                      type="button"
-                      onClick={() => setImageUrl('')}
-                      className="absolute top-2 right-2 px-2.5 py-1 bg-slate-900/90 text-rose-400 rounded-lg text-xs font-semibold hover:bg-slate-900 border border-slate-700"
-                    >
-                      Change Image
-                    </button>
+                  <div className="space-y-2">
+                    {/* Live Storefront Preview of the Banner */}
+                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl aspect-[12/5] group">
+                      <img src={imageUrl} alt="Banner preview" className="w-full h-full object-cover" />
+                      
+                      {/* Vignette & Gradients identical to homepage */}
+                      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/60 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30" />
+
+                      {/* Overlaid Storefront Text Preview */}
+                      <div className="absolute inset-0 flex items-center p-6 sm:p-8">
+                        <div className="max-w-md space-y-2">
+                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[9px] font-bold text-slate-200 uppercase tracking-widest">
+                            <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                            <span>Featured Highlight</span>
+                          </div>
+                          <h3 className="text-lg sm:text-2xl font-black text-white leading-tight">
+                            {title || 'Banner Title Example'}
+                          </h3>
+                          {subtitle && (
+                            <p className="text-xs text-slate-300 line-clamp-2">
+                              {subtitle}
+                            </p>
+                          )}
+                          <div className="pt-1">
+                            <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-slate-950 text-xs font-black rounded-lg shadow-md">
+                              <span>{buttonText || 'Shop Now'}</span>
+                              <ArrowRight className="w-3 h-3" />
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Change Image & Re-crop Actions */}
+                      <div className="absolute top-3 right-3 flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => startCropImage(imageUrl)}
+                          className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-900 text-emerald-400 rounded-xl text-xs font-bold border border-slate-700 shadow-lg flex items-center gap-1.5"
+                        >
+                          <Crop className="w-3.5 h-3.5" />
+                          <span>Crop Frame</span>
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setImageUrl('')}
+                          className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-900 text-rose-400 rounded-xl text-xs font-bold border border-slate-700 shadow-lg"
+                        >
+                          Change Image
+                        </button>
+                      </div>
+
+                      <div className="absolute bottom-2 right-3 px-2 py-0.5 bg-black/70 backdrop-blur-md rounded text-[10px] text-slate-400 font-mono">
+                        Live Storefront Preview
+                      </div>
+                    </div>
                   </div>
                 ) : (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-xl p-6 text-center cursor-pointer transition bg-slate-950 flex flex-col items-center justify-center"
+                    className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl p-8 text-center cursor-pointer transition bg-slate-950 flex flex-col items-center justify-center space-y-2 group"
                   >
-                    {uploading ? (
-                      <div className="flex items-center gap-2 text-emerald-400 text-xs font-medium">
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                        <span>Uploading to Supabase Storage...</span>
-                      </div>
-                    ) : (
-                      <>
-                        <Upload className="w-6 h-6 text-slate-400 mb-2" />
-                        <span className="text-xs font-semibold text-slate-300">Click to upload banner image</span>
-                        <span className="text-[10px] text-slate-500 mt-0.5">PNG, JPG, WebP up to 10MB</span>
-                      </>
-                    )}
+                    <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center group-hover:border-emerald-500/50 transition">
+                      <Upload className="w-6 h-6 text-emerald-400" />
+                    </div>
+                    <div>
+                      <span className="text-xs font-bold text-white block">Click to upload banner image</span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">You can crop and frame any section of the image after selecting</span>
+                    </div>
+                    <span className="text-[10px] text-slate-500">Supports PNG, JPG, WebP up to 15MB</span>
                   </div>
                 )}
 
                 <div className="mt-2">
-                  <label className="block text-[10px] text-slate-400 mb-1">Or paste Image URL directly</label>
-                  <input
-                    type="text"
-                    value={imageUrl}
-                    onChange={e => setImageUrl(e.target.value)}
-                    placeholder="https://..."
-                    className="w-full px-3 py-1.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500"
-                  />
+                  <label className="block text-[10px] text-slate-400 mb-1">Or paste Image URL directly &amp; crop:</label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={imageUrl}
+                      onChange={e => setImageUrl(e.target.value)}
+                      placeholder="https://..."
+                      className="flex-1 px-3 py-2 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs focus:outline-none focus:border-emerald-500 font-mono"
+                    />
+                    {imageUrl && (
+                      <button
+                        type="button"
+                        onClick={() => startCropImage(imageUrl)}
+                        className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-emerald-400 text-xs font-bold rounded-xl transition flex items-center gap-1 shrink-0"
+                      >
+                        <Crop className="w-3.5 h-3.5" />
+                        <span>Crop</span>
+                      </button>
+                    )}
+                  </div>
                 </div>
 
                 {uploadError && <p className="text-xs text-rose-400 mt-1 font-medium">{uploadError}</p>}
@@ -396,6 +618,148 @@ export default function AdminBanners() {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Interactive Image Cropper & Framing Modal */}
+      {isCropModalOpen && (
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 space-y-5 my-6">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">
+                  <Crop className="w-5 h-5 text-emerald-400" />
+                  <span>Select &amp; Crop Part of Banner Image</span>
+                </h2>
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Drag the image or use zoom and position controls to select exactly which part appears in the 1200×500 banner
+                </p>
+              </div>
+              <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">
+                Aspect Ratio: 1200 × 500 px
+              </span>
+            </div>
+
+            {/* Interactive Canvas Viewport */}
+            <div className="space-y-3">
+              <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-500/50 bg-slate-950 shadow-2xl flex items-center justify-center cursor-move">
+                <canvas
+                  ref={canvasRef}
+                  width={1200}
+                  height={500}
+                  onMouseDown={handleMouseDown}
+                  onMouseMove={handleMouseMove}
+                  onMouseUp={handleMouseUp}
+                  onMouseLeave={handleMouseUp}
+                  className="w-full h-auto max-h-[380px] object-contain"
+                />
+
+                {/* Overlaid Grid / Framing Guide */}
+                <div className="absolute inset-0 pointer-events-none border border-white/20 grid grid-cols-3 grid-rows-3 opacity-30" />
+
+                <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md text-[11px] text-white px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2 pointer-events-none">
+                  <Move className="w-3.5 h-3.5 text-emerald-400" />
+                  <span>Click &amp; drag anywhere on image to pan / position</span>
+                </div>
+              </div>
+
+              {/* Controls Bar */}
+              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+                  {/* Zoom Slider */}
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between text-xs font-bold text-slate-300">
+                      <span className="flex items-center gap-1.5">
+                        <ZoomIn className="w-3.5 h-3.5 text-emerald-400" />
+                        <span>Zoom / Scale: {Math.round(cropZoom * 100)}%</span>
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => { setCropZoom(1); setCropOffsetX(0); setCropOffsetY(0); }}
+                        className="text-[11px] text-slate-400 hover:text-white flex items-center gap-1 transition"
+                      >
+                        <RotateCcw className="w-3 h-3" />
+                        <span>Reset</span>
+                      </button>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <button
+                        type="button"
+                        onClick={() => setCropZoom(prev => Math.max(0.6, prev - 0.1))}
+                        className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800"
+                      >
+                        <ZoomOut className="w-4 h-4" />
+                      </button>
+                      <input
+                        type="range"
+                        min="0.6"
+                        max="3"
+                        step="0.05"
+                        value={cropZoom}
+                        onChange={e => setCropZoom(parseFloat(e.target.value))}
+                        className="flex-1 accent-emerald-500"
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setCropZoom(prev => Math.min(3, prev + 0.1))}
+                        className="p-1.5 bg-slate-900 hover:bg-slate-800 text-slate-300 rounded-lg border border-slate-800"
+                      >
+                        <ZoomIn className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  {/* Preset Focus Positions */}
+                  <div className="space-y-1.5">
+                    <label className="block text-xs font-bold text-slate-300">
+                      Quick Framing Presets:
+                    </label>
+                    <div className="grid grid-cols-5 gap-1.5">
+                      {(['center', 'top', 'bottom', 'left', 'right'] as const).map(preset => (
+                        <button
+                          key={preset}
+                          type="button"
+                          onClick={() => applyPreset(preset)}
+                          className="py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-400 rounded-lg border border-slate-800 transition capitalize"
+                        >
+                          {preset}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Actions */}
+            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+              <button
+                type="button"
+                onClick={() => setIsCropModalOpen(false)}
+                className="px-4 py-2.5 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-700 transition"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={applyCropAndUpload}
+                disabled={isCropping}
+                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-900/30 disabled:opacity-50"
+              >
+                {isCropping ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Applying Crop &amp; Uploading...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>Apply Crop &amp; Use Image</span>
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </div>
       )}

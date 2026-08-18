@@ -56,7 +56,7 @@ export default function BannerCarousel({ banners }: BannerCarouselProps) {
               <img
                 src={banner.imageUrl}
                 alt={banner.title || 'Promotional Banner'}
-                className="w-full h-full object-cover object-center transform scale-105 transition-transform duration-7000 ease-out"
+                className={`w-full h-full object-cover object-${(banner as any).imagePosition || (banner as any).image_position || 'center'} transform scale-105 transition-transform duration-7000 ease-out`}
                 style={{
                   transform: isActive ? 'scale(1.05)' : 'scale(1.0)',
                   transition: 'transform 6s ease-out',

@@ -1763,8 +1763,17 @@ async function startServer() {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { id } = req.params;
-    const { admin_email, storage_path, ...updates } = req.body;
-    const { data, error } = await (db.from('homepage_banners') as any).update({ ...updates, updated_at: new Date() }).eq('id', id).select('*').single();
+    const { admin_email, storage_path, image_position, imagePosition, ...rawUpdates } = req.body;
+    
+    const allowedFields = ['title', 'subtitle', 'image_url', 'button_text', 'button_link', 'sort_order', 'is_active'];
+    const safeUpdates: Record<string, any> = {};
+    for (const key of allowedFields) {
+      if (rawUpdates[key] !== undefined) {
+        safeUpdates[key] = rawUpdates[key];
+      }
+    }
+
+    const { data, error } = await (db.from('homepage_banners') as any).update({ ...safeUpdates, updated_at: new Date() }).eq('id', id).select('*').single();
     if (error) return res.status(400).json({ error: error.message });
     await logAdminAction(db, admin_email || 'system@admin', 'UPDATE', 'homepage_banners', id, null, data, `Updated banner`);
     res.json({ success: true, banner: data });
