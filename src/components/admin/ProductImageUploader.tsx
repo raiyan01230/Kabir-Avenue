@@ -16,12 +16,14 @@ interface ProductImageUploaderProps {
   images: ProductImageItem[];
   onChange: (images: ProductImageItem[]) => void;
   folder?: string;
+  onImageUploaded?: (item: ProductImageItem, base64?: string) => void;
 }
 
 export default function ProductImageUploader({
   images,
   onChange,
-  folder = 'products'
+  folder = 'products',
+  onImageUploaded
 }: ProductImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [manualUrl, setManualUrl] = useState('');
@@ -87,15 +89,19 @@ export default function ProductImageUploader({
         const data = await res.json();
         if (res.ok && data.publicUrl) {
           // Update item with permanent Supabase storage URL
-          const updated = [...combined];
-          updated[targetIndex] = {
-            ...updated[targetIndex],
+          const updatedItem = {
+            ...combined[targetIndex],
             image_url: data.publicUrl,
             storage_path: data.storagePath,
             uploading: false,
             error: undefined
           };
+          const updated = [...combined];
+          updated[targetIndex] = updatedItem;
           onChange(updated);
+          if (onImageUploaded) {
+            onImageUploaded(updatedItem, base64);
+          }
         } else {
           const updated = [...combined];
           updated[targetIndex] = {
