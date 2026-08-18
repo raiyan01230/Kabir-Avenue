@@ -1741,7 +1741,7 @@ async function startServer() {
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { title, subtitle, image_url, button_text, button_link, sort_order, is_active, admin_email } = req.body;
     const { data, error } = await (db.from('homepage_banners') as any).insert({
-      title, subtitle, image_url, storage_path: image_url, button_text, button_link, sort_order: sort_order || 0, is_active: is_active ?? true
+      title, subtitle, image_url, button_text, button_link, sort_order: sort_order || 0, is_active: is_active ?? true
     }).select('*').single();
     if (error) return res.status(400).json({ error: error.message });
     await logAdminAction(db, admin_email || 'system@admin', 'CREATE', 'homepage_banners', data.id, null, data, `Created banner`);
@@ -1752,7 +1752,7 @@ async function startServer() {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { id } = req.params;
-    const { admin_email, ...updates } = req.body;
+    const { admin_email, storage_path, ...updates } = req.body;
     const { data, error } = await (db.from('homepage_banners') as any).update({ ...updates, updated_at: new Date() }).eq('id', id).select('*').single();
     if (error) return res.status(400).json({ error: error.message });
     await logAdminAction(db, admin_email || 'system@admin', 'UPDATE', 'homepage_banners', id, null, data, `Updated banner`);

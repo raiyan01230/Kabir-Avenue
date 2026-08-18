@@ -14,38 +14,47 @@ interface ProductPurchaseHistoryModalProps {
 export default function ProductPurchaseHistoryModal({ productId, onClose }: ProductPurchaseHistoryModalProps) {
   const [data, setData] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
 
-  const fetchPurchaseHistory = () => {
+  const fetchPurchaseHistory = async () => {
     setLoading(true);
-    fetch(`/api/admin/products/${productId}/purchase-history`)
-      .then((r) => r.json())
-      .then((res) => {
-        setData(res);
-        setLoading(false);
-      })
-      .catch((err) => {
-        console.error('Failed to load product purchase history:', err);
-        setLoading(false);
-      });
+    setError(null);
+    try {
+      const res = await fetch(`/api/admin/products/${productId}/purchase-history`);
+      const json = await res.json();
+      if (!res.ok) {
+        throw new Error(json.error || 'Failed to fetch product purchase history');
+      }
+      setData(json);
+    } catch (err: any) {
+      console.error('Failed to load product purchase history:', err);
+      setError(err.message || 'Network error while loading sales history');
+    } finally {
+      setLoading(false);
+    }
   };
 
   useEffect(() => {
-    fetchPurchaseHistory();
+    if (productId) {
+      fetchPurchaseHistory();
+    }
   }, [productId]);
 
   const stats = data?.stats || {
-    total_orders: 0,
-    total_units_sold: 0,
-    total_revenue: 0,
-    unique_customers_count: 0,
-    last_ordered_at: null,
+    totalOrders: 0,
+    totalUnitsSold: 0,
+    totalRevenue: 0,
+    uniqueCustomersCount: 0,
+    lastOrderedDate: null,
   };
 
-  const purchases = (data?.purchases || []).filter((p: any) => {
-    const custName = (p.customer?.full_name || '').toLowerCase();
+  const purchaseHistoryList = data?.purchaseHistory || [];
+
+  const purchases = purchaseHistoryList.filter((p: any) => {
+    const custName = (p.customer?.name || '').toLowerCase();
     const custEmail = (p.customer?.email || '').toLowerCase();
-    const orderNum = (p.order_number || '').toLowerCase();
+    const orderNum = (p.orderNumber || '').toLowerCase();
     const query = search.toLowerCase();
     return custName.includes(query) || custEmail.includes(query) || orderNum.includes(query);
   });
@@ -99,6 +108,19 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
               <RefreshCw className="w-8 h-8 animate-spin mx-auto text-emerald-400 mb-3" />
               <p className="text-xs font-semibold">Aggregating historical product orders &amp; buyers...</p>
             </div>
+          ) : error ? (
+            <div className="py-16 text-center bg-rose-500/10 border border-rose-500/20 rounded-2xl p-6">
+              <AlertCircle className="w-10 h-10 text-rose-400 mx-auto mb-3" />
+              <h3 className="text-white font-bold text-sm">Failed to Load Sales History</h3>
+              <p className="text-xs text-rose-300 mt-1 mb-4">{error}</p>
+              <button
+                onClick={fetchPurchaseHistory}
+                className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white text-xs font-bold rounded-xl transition inline-flex items-center gap-2"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                <span>Retry Loading</span>
+              </button>
+            </div>
           ) : (
             <>
               {/* Sales Metrics Cards */}
@@ -109,7 +131,7 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                     <span>Total Orders</span>
                   </div>
                   <div className="text-xl font-black text-white mt-1">
-                    {stats.total_orders}
+                    {stats.totalOrders}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
                     Orders containing this item
@@ -122,7 +144,7 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                     <span>Total Units Sold</span>
                   </div>
                   <div className="text-xl font-black text-purple-300 mt-1">
-                    {stats.total_units_sold} units
+                    {stats.totalUnitsSold} units
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
                     Total volume purchased
@@ -135,7 +157,7 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                     <span>Total Revenue</span>
                   </div>
                   <div className="text-xl font-black text-emerald-400 mt-1">
-                    ৳{stats.total_revenue.toLocaleString()}
+                    ৳{Number(stats.totalRevenue || 0).toLocaleString()}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
                     Gross item sales
@@ -148,11 +170,11 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                     <span>Unique Buyers</span>
                   </div>
                   <div className="text-xl font-black text-amber-300 mt-1">
-                    {stats.unique_customers_count}
+                    {stats.uniqueCustomersCount}
                   </div>
                   <div className="text-[10px] text-slate-500 mt-0.5">
-                    {stats.last_ordered_at
-                      ? `Last: ${new Date(stats.last_ordered_at).toLocaleDateString()}`
+                    {stats.lastOrderedDate
+                      ? `Last: ${new Date(stats.lastOrderedDate).toLocaleDateString()}`
                       : 'No orders yet'}
                   </div>
                 </div>
@@ -201,19 +223,20 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                       </tr>
                     ) : (
                       purchases.map((p: any) => {
-                        const status = p.order_status || 'pending';
+                        const status = p.orderStatus || 'pending';
+                        const cust = p.customer || {};
                         return (
-                          <tr key={p.id} className="hover:bg-slate-900/60 transition">
+                          <tr key={p.orderItemId || Math.random()} className="hover:bg-slate-900/60 transition">
                             <td className="py-3 px-4">
                               <div className="font-bold text-white flex items-center gap-2">
                                 <div className="w-7 h-7 bg-emerald-500/10 text-emerald-400 rounded-full flex items-center justify-center font-bold text-xs border border-emerald-500/20 shrink-0">
-                                  {(p.customer?.full_name?.[0] || 'C').toUpperCase()}
+                                  {(cust.name?.[0] || 'C').toUpperCase()}
                                 </div>
                                 <div>
-                                  <div>{p.customer?.full_name || 'Anonymous Customer'}</div>
+                                  <div>{cust.name || 'Anonymous Customer'}</div>
                                   <div className="text-[10px] text-slate-400 flex items-center gap-1">
                                     <Mail className="w-2.5 h-2.5" />
-                                    <span>{p.customer?.email || 'N/A'}</span>
+                                    <span>{cust.email || 'N/A'}</span>
                                   </div>
                                 </div>
                               </div>
@@ -221,20 +244,20 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
 
                             <td className="py-3 px-4">
                               <span className="font-mono text-emerald-400 font-bold">
-                                {p.order_number}
+                                {p.orderNumber || 'N/A'}
                               </span>
                             </td>
 
                             <td className="py-3 px-4 text-center font-bold text-white">
-                              {p.quantity}
+                              {p.quantity || 1}
                             </td>
 
                             <td className="py-3 px-4 text-right text-slate-300 font-mono">
-                              ৳{Number(p.unit_price || 0).toLocaleString()}
+                              ৳{Number(p.unitPrice || 0).toLocaleString()}
                             </td>
 
                             <td className="py-3 px-4 text-right font-black text-emerald-400 font-mono">
-                              ৳{Number(p.line_total || 0).toLocaleString()}
+                              ৳{Number(p.lineTotal || 0).toLocaleString()}
                             </td>
 
                             <td className="py-3 px-4 text-center">
@@ -252,8 +275,8 @@ export default function ProductPurchaseHistoryModal({ productId, onClose }: Prod
                             </td>
 
                             <td className="py-3 px-4 text-right text-slate-400">
-                              {p.order_created_at
-                                ? new Date(p.order_created_at).toLocaleDateString()
+                              {p.orderDate
+                                ? new Date(p.orderDate).toLocaleDateString()
                                 : 'N/A'}
                             </td>
                           </tr>

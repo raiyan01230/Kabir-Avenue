@@ -133,11 +133,23 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setLinkTag('canonical', seo.canonicalUrl || finalOgUrl);
 
   // 6. Favicon if configured in settings
-  const faviconUrl = globalSettings?.['store_favicon'] || globalSettings?.['favicon_url'];
+  const faviconUrl = globalSettings?.['store_favicon'] || globalSettings?.['favicon_url'] || globalSettings?.['favicon'];
   if (faviconUrl) {
     setLinkTag('icon', faviconUrl);
     setLinkTag('shortcut icon', faviconUrl);
     setLinkTag('apple-touch-icon', faviconUrl);
+
+    if (typeof document !== 'undefined') {
+      const existingIcons = document.querySelectorAll("link[rel*='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']");
+      if (existingIcons.length > 0) {
+        existingIcons.forEach(el => el.setAttribute('href', faviconUrl));
+      } else {
+        const link = document.createElement('link');
+        link.rel = 'icon';
+        link.href = faviconUrl;
+        document.head.appendChild(link);
+      }
+    }
   }
 }
 
