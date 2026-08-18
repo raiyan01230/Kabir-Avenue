@@ -95,7 +95,6 @@ export default function AdminBanners() {
       setIsCropModalOpen(true);
     };
     img.onerror = () => {
-      // If cross-origin fails, still open and attempt
       cropImageRef.current = img;
       setIsCropModalOpen(true);
     };
@@ -122,7 +121,6 @@ export default function AdminBanners() {
     reader.readAsDataURL(file);
     reader.onload = () => {
       const base64 = reader.result as string;
-      // Open the crop tool immediately so admin can select the exact part of the image
       startCropImage(base64);
     };
     reader.onerror = () => {
@@ -168,7 +166,7 @@ export default function AdminBanners() {
     ctx.drawImage(img, x, y, scaledWidth, scaledHeight);
   }, [isCropModalOpen, cropZoom, cropOffsetX, cropOffsetY, rawImageSource]);
 
-  // Handle Dragging / Panning on canvas
+  // Mouse pan handlers
   const handleMouseDown = (e: React.MouseEvent<HTMLCanvasElement>) => {
     setIsDragging(true);
     setDragStart({ x: e.clientX - cropOffsetX, y: e.clientY - cropOffsetY });
@@ -181,6 +179,23 @@ export default function AdminBanners() {
   };
 
   const handleMouseUp = () => {
+    setIsDragging(false);
+  };
+
+  // Touch pan handlers for mobile/tablet admin usage
+  const handleTouchStart = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (e.touches.length !== 1) return;
+    setIsDragging(true);
+    setDragStart({ x: e.touches[0].clientX - cropOffsetX, y: e.touches[0].clientY - cropOffsetY });
+  };
+
+  const handleTouchMove = (e: React.TouchEvent<HTMLCanvasElement>) => {
+    if (!isDragging || e.touches.length !== 1) return;
+    setCropOffsetX(e.touches[0].clientX - dragStart.x);
+    setCropOffsetY(e.touches[0].clientY - dragStart.y);
+  };
+
+  const handleTouchEnd = () => {
     setIsDragging(false);
   };
 
@@ -209,7 +224,6 @@ export default function AdminBanners() {
         setImageUrl(data.publicUrl);
         setIsCropModalOpen(false);
       } else {
-        // Fallback to the local cropped base64 if storage is unreachable
         setImageUrl(croppedBase64);
         setIsCropModalOpen(false);
       }
@@ -271,7 +285,6 @@ export default function AdminBanners() {
       return;
     }
 
-    // Only send valid database columns to avoid schema cache errors
     const payload = {
       title: title.trim() || null,
       subtitle: subtitle.trim() || null,
@@ -319,14 +332,14 @@ export default function AdminBanners() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-extrabold text-white">Homepage Banners</h1>
-          <p className="text-xs text-slate-400 mt-1">Manage promotional banners, crop framing, and live previews on the customer storefront</p>
+          <h1 className="text-xl sm:text-2xl font-extrabold text-white">Homepage Banners</h1>
+          <p className="text-xs text-slate-400 mt-1">Manage promotional carousel banners, crop framing, and live storefront previews</p>
         </div>
         <button
           onClick={openCreateModal}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-900/30"
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-900/30 w-full sm:w-auto"
         >
           <Plus className="w-4 h-4" />
           <span>Add New Banner</span>
@@ -401,18 +414,18 @@ export default function AdminBanners() {
 
       {/* Main Banner Add / Edit Modal */}
       {isModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-6 my-8 space-y-5">
+        <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-sm flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-2xl w-full p-4 sm:p-6 my-4 sm:my-8 space-y-4 sm:space-y-5">
             <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-              <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                <ImageIcon className="w-5 h-5 text-emerald-400" />
+              <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                <ImageIcon className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
                 <span>{editingBannerId ? 'Edit Homepage Banner' : 'Add Homepage Banner'}</span>
               </h2>
-              <span className="text-[11px] text-slate-400 font-mono">Recommended: 1200 × 500 px</span>
+              <span className="text-[10px] sm:text-[11px] text-slate-400 font-mono">1200 × 500 px</span>
             </div>
 
             <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Banner Title</label>
                   <input
@@ -445,7 +458,7 @@ export default function AdminBanners() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
                 <div>
                   <label className="block text-xs font-medium text-slate-300 mb-1">Button Text</label>
                   <input
@@ -469,7 +482,7 @@ export default function AdminBanners() {
               </div>
 
               {/* Banner Image & Cropping Section */}
-              <div className="space-y-3 pt-1">
+              <div className="space-y-2.5 pt-1">
                 <div className="flex items-center justify-between">
                   <label className="block text-xs font-bold text-slate-200">
                     Banner Image &amp; Crop Selection
@@ -481,7 +494,7 @@ export default function AdminBanners() {
                       className="px-2.5 py-1 bg-emerald-600/20 text-emerald-400 hover:bg-emerald-600/30 border border-emerald-500/30 rounded-lg text-xs font-bold transition flex items-center gap-1.5"
                     >
                       <Crop className="w-3.5 h-3.5" />
-                      <span>Crop / Select Part of Image</span>
+                      <span>Crop / Refocus Image</span>
                     </button>
                   )}
                 </div>
@@ -491,72 +504,72 @@ export default function AdminBanners() {
                 {imageUrl ? (
                   <div className="space-y-2">
                     {/* Live Storefront Preview of the Banner */}
-                    <div className="relative rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl aspect-[12/5] group">
+                    <div className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl aspect-[12/5] group">
                       <img src={imageUrl} alt="Banner preview" className="w-full h-full object-cover" />
                       
                       {/* Vignette & Gradients identical to homepage */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/90 via-slate-950/60 to-transparent" />
+                      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/70 to-transparent" />
                       <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30" />
 
                       {/* Overlaid Storefront Text Preview */}
-                      <div className="absolute inset-0 flex items-center p-6 sm:p-8">
-                        <div className="max-w-md space-y-2">
-                          <div className="inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[9px] font-bold text-slate-200 uppercase tracking-widest">
-                            <Sparkles className="w-2.5 h-2.5 text-amber-400" />
+                      <div className="absolute inset-0 flex items-center p-4 sm:p-8">
+                        <div className="max-w-[85%] sm:max-w-md space-y-1 sm:space-y-2">
+                          <div className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[8px] sm:text-[9px] font-bold text-slate-200 uppercase tracking-widest">
+                            <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-amber-400" />
                             <span>Featured Highlight</span>
                           </div>
-                          <h3 className="text-lg sm:text-2xl font-black text-white leading-tight">
+                          <h3 className="text-sm sm:text-2xl font-black text-white leading-tight line-clamp-1">
                             {title || 'Banner Title Example'}
                           </h3>
                           {subtitle && (
-                            <p className="text-xs text-slate-300 line-clamp-2">
+                            <p className="text-[10px] sm:text-xs text-slate-300 line-clamp-1 sm:line-clamp-2">
                               {subtitle}
                             </p>
                           )}
-                          <div className="pt-1">
-                            <span className="inline-flex items-center gap-1.5 px-4 py-2 bg-white text-slate-950 text-xs font-black rounded-lg shadow-md">
+                          <div className="pt-0.5">
+                            <span className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-4 sm:py-2 bg-white text-slate-950 text-[10px] sm:text-xs font-black rounded-md sm:rounded-lg shadow-md">
                               <span>{buttonText || 'Shop Now'}</span>
-                              <ArrowRight className="w-3 h-3" />
+                              <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
                             </span>
                           </div>
                         </div>
                       </div>
 
                       {/* Change Image & Re-crop Actions */}
-                      <div className="absolute top-3 right-3 flex items-center gap-2">
+                      <div className="absolute top-2 sm:top-3 right-2 sm:right-3 flex items-center gap-1.5 sm:gap-2">
                         <button
                           type="button"
                           onClick={() => startCropImage(imageUrl)}
-                          className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-900 text-emerald-400 rounded-xl text-xs font-bold border border-slate-700 shadow-lg flex items-center gap-1.5"
+                          className="px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-900/90 hover:bg-slate-900 text-emerald-400 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold border border-slate-700 shadow-lg flex items-center gap-1"
                         >
-                          <Crop className="w-3.5 h-3.5" />
+                          <Crop className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
                           <span>Crop Frame</span>
                         </button>
                         <button
                           type="button"
                           onClick={() => setImageUrl('')}
-                          className="px-3 py-1.5 bg-slate-900/90 hover:bg-slate-900 text-rose-400 rounded-xl text-xs font-bold border border-slate-700 shadow-lg"
+                          className="px-2 sm:px-3 py-1 sm:py-1.5 bg-slate-900/90 hover:bg-slate-900 text-rose-400 rounded-lg sm:rounded-xl text-[10px] sm:text-xs font-bold border border-slate-700 shadow-lg"
                         >
-                          Change Image
+                          Change
                         </button>
                       </div>
 
-                      <div className="absolute bottom-2 right-3 px-2 py-0.5 bg-black/70 backdrop-blur-md rounded text-[10px] text-slate-400 font-mono">
-                        Live Storefront Preview
+                      <div className="absolute bottom-2 right-2 sm:right-3 px-1.5 py-0.5 bg-black/70 backdrop-blur-md rounded text-[8px] sm:text-[10px] text-slate-400 font-mono">
+                        Storefront Live Preview
                       </div>
                     </div>
                   </div>
                 ) : (
                   <div
                     onClick={() => fileInputRef.current?.click()}
-                    className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-2xl p-8 text-center cursor-pointer transition bg-slate-950 flex flex-col items-center justify-center space-y-2 group"
+                    className="border-2 border-dashed border-slate-800 hover:border-emerald-500/50 rounded-xl p-6 sm:p-8 text-center cursor-pointer transition bg-slate-950 flex flex-col items-center justify-center space-y-2 group"
                   >
-                    <div className="w-12 h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center group-hover:border-emerald-500/50 transition">
-                      <Upload className="w-6 h-6 text-emerald-400" />
+                    <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-slate-900 border border-slate-800 flex items-center justify-center group-hover:border-emerald-500/50 transition">
+                      <Upload className="w-5 h-5 sm:w-6 sm:h-6 text-emerald-400" />
                     </div>
                     <div>
                       <span className="text-xs font-bold text-white block">Click to upload banner image</span>
-                      <span className="text-[11px] text-slate-400 block mt-0.5">You can crop and frame any section of the image after selecting</span>
+                      <span className="text-[11px] text-slate-400 block mt-0.5">Crop and frame any section of the image</span>
                     </div>
                     <span className="text-[10px] text-slate-500">Supports PNG, JPG, WebP up to 15MB</span>
                   </div>
@@ -588,7 +601,7 @@ export default function AdminBanners() {
                 {uploadError && <p className="text-xs text-rose-400 mt-1 font-medium">{uploadError}</p>}
               </div>
 
-              <div className="flex items-center gap-2 pt-2">
+              <div className="flex items-center gap-2 pt-1">
                 <input
                   type="checkbox"
                   id="bannerIsActive"
@@ -601,7 +614,7 @@ export default function AdminBanners() {
                 </label>
               </div>
 
-              <div className="flex justify-end gap-3 pt-4 border-t border-slate-800">
+              <div className="flex justify-end gap-3 pt-3 border-t border-slate-800">
                 <button
                   type="button"
                   onClick={() => setIsModalOpen(false)}
@@ -624,26 +637,26 @@ export default function AdminBanners() {
 
       {/* Interactive Image Cropper & Framing Modal */}
       {isCropModalOpen && (
-        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-4 z-50 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-6 space-y-5 my-6">
-            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="fixed inset-0 bg-slate-950/90 backdrop-blur-md flex items-center justify-center p-3 sm:p-4 z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl max-w-4xl w-full p-4 sm:p-6 space-y-4 my-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-800 pb-3 gap-2">
               <div>
-                <h2 className="text-lg font-bold text-white flex items-center gap-2">
-                  <Crop className="w-5 h-5 text-emerald-400" />
+                <h2 className="text-base sm:text-lg font-bold text-white flex items-center gap-2">
+                  <Crop className="w-4 h-4 sm:w-5 sm:h-5 text-emerald-400" />
                   <span>Select &amp; Crop Part of Banner Image</span>
                 </h2>
                 <p className="text-xs text-slate-400 mt-0.5">
-                  Drag the image or use zoom and position controls to select exactly which part appears in the 1200×500 banner
+                  Drag with mouse/finger and zoom to frame the image perfectly
                 </p>
               </div>
-              <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300">
-                Aspect Ratio: 1200 × 500 px
+              <span className="text-[11px] font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-slate-300 self-start sm:self-auto">
+                1200 × 500 px
               </span>
             </div>
 
-            {/* Interactive Canvas Viewport */}
+            {/* Interactive Canvas Viewport with Touch and Mouse support */}
             <div className="space-y-3">
-              <div className="relative rounded-2xl overflow-hidden border-2 border-emerald-500/50 bg-slate-950 shadow-2xl flex items-center justify-center cursor-move">
+              <div className="relative rounded-xl overflow-hidden border-2 border-emerald-500/50 bg-slate-950 shadow-2xl flex items-center justify-center cursor-move touch-none">
                 <canvas
                   ref={canvasRef}
                   width={1200}
@@ -652,27 +665,30 @@ export default function AdminBanners() {
                   onMouseMove={handleMouseMove}
                   onMouseUp={handleMouseUp}
                   onMouseLeave={handleMouseUp}
-                  className="w-full h-auto max-h-[380px] object-contain"
+                  onTouchStart={handleTouchStart}
+                  onTouchMove={handleTouchMove}
+                  onTouchEnd={handleTouchEnd}
+                  className="w-full h-auto max-h-[340px] sm:max-h-[380px] object-contain"
                 />
 
-                {/* Overlaid Grid / Framing Guide */}
+                {/* Overlaid Grid Guide */}
                 <div className="absolute inset-0 pointer-events-none border border-white/20 grid grid-cols-3 grid-rows-3 opacity-30" />
 
-                <div className="absolute bottom-3 left-3 bg-black/80 backdrop-blur-md text-[11px] text-white px-3 py-1 rounded-lg border border-white/10 flex items-center gap-2 pointer-events-none">
-                  <Move className="w-3.5 h-3.5 text-emerald-400" />
-                  <span>Click &amp; drag anywhere on image to pan / position</span>
+                <div className="absolute bottom-2 left-2 bg-black/80 backdrop-blur-md text-[10px] text-white px-2.5 py-1 rounded-lg border border-white/10 flex items-center gap-1.5 pointer-events-none">
+                  <Move className="w-3 h-3 text-emerald-400" />
+                  <span>Drag with finger or mouse to pan / position</span>
                 </div>
               </div>
 
               {/* Controls Bar */}
-              <div className="bg-slate-950 p-4 rounded-xl border border-slate-800 space-y-4">
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 items-center">
+              <div className="bg-slate-950 p-3 sm:p-4 rounded-xl border border-slate-800 space-y-3">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 items-center">
                   {/* Zoom Slider */}
                   <div className="space-y-1.5">
                     <div className="flex items-center justify-between text-xs font-bold text-slate-300">
                       <span className="flex items-center gap-1.5">
                         <ZoomIn className="w-3.5 h-3.5 text-emerald-400" />
-                        <span>Zoom / Scale: {Math.round(cropZoom * 100)}%</span>
+                        <span>Scale: {Math.round(cropZoom * 100)}%</span>
                       </span>
                       <button
                         type="button"
@@ -683,7 +699,7 @@ export default function AdminBanners() {
                         <span>Reset</span>
                       </button>
                     </div>
-                    <div className="flex items-center gap-3">
+                    <div className="flex items-center gap-2 sm:gap-3">
                       <button
                         type="button"
                         onClick={() => setCropZoom(prev => Math.max(0.6, prev - 0.1))}
@@ -721,7 +737,7 @@ export default function AdminBanners() {
                           key={preset}
                           type="button"
                           onClick={() => applyPreset(preset)}
-                          className="py-1.5 text-xs font-bold bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-400 rounded-lg border border-slate-800 transition capitalize"
+                          className="py-1.5 text-[11px] sm:text-xs font-bold bg-slate-900 hover:bg-slate-800 hover:text-white text-slate-400 rounded-lg border border-slate-800 transition capitalize"
                         >
                           {preset}
                         </button>
@@ -733,11 +749,11 @@ export default function AdminBanners() {
             </div>
 
             {/* Actions */}
-            <div className="flex items-center justify-between pt-3 border-t border-slate-800">
+            <div className="flex items-center justify-between pt-2 border-t border-slate-800">
               <button
                 type="button"
                 onClick={() => setIsCropModalOpen(false)}
-                className="px-4 py-2.5 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-700 transition"
+                className="px-4 py-2 bg-slate-800 text-slate-300 text-xs font-bold rounded-xl hover:bg-slate-700 transition"
               >
                 Cancel
               </button>
@@ -745,17 +761,17 @@ export default function AdminBanners() {
                 type="button"
                 onClick={applyCropAndUpload}
                 disabled={isCropping}
-                className="px-6 py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-900/30 disabled:opacity-50"
+                className="px-5 sm:px-6 py-2 sm:py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl transition flex items-center gap-2 shadow-lg shadow-emerald-900/30 disabled:opacity-50"
               >
                 {isCropping ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    <span>Applying Crop &amp; Uploading...</span>
+                    <span>Cropping...</span>
                   </>
                 ) : (
                   <>
                     <Check className="w-4 h-4" />
-                    <span>Apply Crop &amp; Use Image</span>
+                    <span>Apply Crop &amp; Save</span>
                   </>
                 )}
               </button>
