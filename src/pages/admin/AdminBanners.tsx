@@ -504,36 +504,44 @@ export default function AdminBanners() {
                 {imageUrl ? (
                   <div className="space-y-2">
                     {/* Live Storefront Preview of the Banner */}
-                    <div className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl aspect-[12/5] group">
+                    <div className="relative rounded-xl sm:rounded-2xl overflow-hidden bg-slate-950 border border-slate-800 shadow-2xl aspect-[2.4/1] group">
                       <img src={imageUrl} alt="Banner preview" className="w-full h-full object-cover" />
                       
-                      {/* Vignette & Gradients identical to homepage */}
-                      <div className="absolute inset-0 bg-gradient-to-r from-slate-950/95 via-slate-950/70 to-transparent" />
-                      <div className="absolute inset-0 bg-gradient-to-t from-slate-950/80 via-transparent to-slate-950/30" />
+                      {/* Only render text overlay if title or subtitle is populated */}
+                      {(title.trim() || subtitle.trim()) && (
+                        <>
+                          <div className="absolute inset-0 bg-gradient-to-r from-slate-950/85 via-slate-950/40 to-transparent sm:from-slate-950/80 sm:via-slate-950/30" />
+                          <div className="absolute inset-0 bg-gradient-to-t from-slate-950/60 via-transparent to-transparent" />
 
-                      {/* Overlaid Storefront Text Preview */}
-                      <div className="absolute inset-0 flex items-center p-4 sm:p-8">
-                        <div className="max-w-[85%] sm:max-w-md space-y-1 sm:space-y-2">
-                          <div className="inline-flex items-center gap-1 px-1.5 sm:px-2 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[8px] sm:text-[9px] font-bold text-slate-200 uppercase tracking-widest">
-                            <Sparkles className="w-2 h-2 sm:w-2.5 sm:h-2.5 text-amber-400" />
-                            <span>Featured Highlight</span>
+                          {/* Overlaid Storefront Text Preview */}
+                          <div className="absolute inset-0 flex items-center p-3 sm:p-6">
+                            <div className="max-w-[78%] sm:max-w-md space-y-1 sm:space-y-2">
+                              {title.trim() && (
+                                <div className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-full bg-white/10 backdrop-blur-md border border-white/20 text-[8px] sm:text-[9px] font-bold text-slate-200 uppercase tracking-widest">
+                                  <Sparkles className="w-2 h-2 text-amber-400" />
+                                  <span>Featured</span>
+                                </div>
+                              )}
+                              {title.trim() && (
+                                <h3 className="text-xs sm:text-xl font-black text-white leading-tight line-clamp-1">
+                                  {title}
+                                </h3>
+                              )}
+                              {subtitle.trim() && (
+                                <p className="text-[9px] sm:text-xs text-slate-300 line-clamp-1 sm:line-clamp-2">
+                                  {subtitle}
+                                </p>
+                              )}
+                              <div className="pt-0.5">
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 sm:px-3.5 sm:py-1.5 bg-white text-slate-950 text-[9px] sm:text-xs font-black rounded-md shadow-md">
+                                  <span>{buttonText || 'Shop Now'}</span>
+                                  <ArrowRight className="w-2 h-2 sm:w-3 sm:h-3" />
+                                </span>
+                              </div>
+                            </div>
                           </div>
-                          <h3 className="text-sm sm:text-2xl font-black text-white leading-tight line-clamp-1">
-                            {title || 'Banner Title Example'}
-                          </h3>
-                          {subtitle && (
-                            <p className="text-[10px] sm:text-xs text-slate-300 line-clamp-1 sm:line-clamp-2">
-                              {subtitle}
-                            </p>
-                          )}
-                          <div className="pt-0.5">
-                            <span className="inline-flex items-center gap-1 px-2.5 py-1 sm:px-4 sm:py-2 bg-white text-slate-950 text-[10px] sm:text-xs font-black rounded-md sm:rounded-lg shadow-md">
-                              <span>{buttonText || 'Shop Now'}</span>
-                              <ArrowRight className="w-2.5 h-2.5 sm:w-3 sm:h-3" />
-                            </span>
-                          </div>
-                        </div>
-                      </div>
+                        </>
+                      )}
 
                       {/* Change Image & Re-crop Actions */}
                       <div className="absolute top-2 sm:top-3 right-2 sm:right-3 flex items-center gap-1.5 sm:gap-2">

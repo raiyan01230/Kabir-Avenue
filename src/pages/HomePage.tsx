@@ -175,7 +175,7 @@ export default function HomePage() {
 
       {/* 1. Dynamic Hero Banner Carousel Engine */}
       {banners.length > 0 && (
-        <section className="container mx-auto px-4 pt-4">
+        <section className="container mx-auto px-2 sm:px-4 pt-2 sm:pt-4">
           <BannerCarousel banners={banners} />
         </section>
       )}
