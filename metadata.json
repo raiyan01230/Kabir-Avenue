@@ -1,6 +1,6 @@
 {
   "name": "Hyperdrive E-Commerce",
-  "description": "A professional e-commerce platform for Bangladesh.",
+  "description": "A production-grade e-commerce platform for Bangladesh featuring dynamic XML sitemaps, robots.txt, Google Search Console & Schema markup, AI-driven SEO meta generation, and multi-channel order management.",
   "requestFramePermissions": [],
   "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
 }

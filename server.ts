@@ -6,6 +6,18 @@ import { createServer as createViteServer } from "vite";
 import { createClient } from '@supabase/supabase-js';
 import { GoogleGenAI } from '@google/genai';
 import { sendOrderConfirmation, sendAccountConfirmationEmail } from './src/lib/email';
+import {
+  generateRobotsTxt,
+  generateMasterSitemap,
+  generateProductsSitemap,
+  generateCategoriesSitemap,
+  generateImagesSitemap,
+  generatePagesSitemap,
+  generateRssFeed,
+  generateGoogleMerchantFeed,
+  runSeoAudit,
+  pingSearchEngines
+} from './src/lib/seo-engine';
 
 let supabaseAdmin: ReturnType<typeof createClient> | null = null;
 let geminiClient: GoogleGenAI | null = null;
@@ -2377,12 +2389,333 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     }
   });
 
+    // -------------------------------------------------------------
+    // Dynamic SEO & Search Engine Indexing Routes
+    // -------------------------------------------------------------
+    app.get("/robots.txt", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let customRules = '';
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_robots_txt') customRules = row.setting_value;
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+        const robots = generateRobotsTxt(baseUrl, customRules);
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(robots);
+      } catch (err: any) {
+        console.error('Robots.txt error:', err);
+        res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+        res.send(`User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${req.protocol}://${req.get('host')}/sitemap.xml\n`);
+      }
+    });
+
+    app.get("/sitemap.xml", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let products: any[] = [];
+        let categories: any[] = [];
+
+        if (db) {
+          const [pRes, cRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('categories') as any).select('*').order('name'),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          categories = cRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+
+        const sitemap = generateMasterSitemap(baseUrl, products, categories);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(sitemap);
+      } catch (err: any) {
+        console.error('Sitemap.xml error:', err);
+        res.status(500).send('Error generating master sitemap');
+      }
+    });
+
+    app.get("/sitemap-products.xml", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let products: any[] = [];
+
+        if (db) {
+          const [pRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+
+        const sitemap = generateProductsSitemap(baseUrl, products);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(sitemap);
+      } catch (err: any) {
+        console.error('sitemap-products.xml error:', err);
+        res.status(500).send('Error generating products sitemap');
+      }
+    });
+
+    app.get("/sitemap-categories.xml", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let categories: any[] = [];
+
+        if (db) {
+          const [cRes, sRes] = await Promise.all([
+            (db.from('categories') as any).select('*').order('name'),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          categories = cRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+
+        const sitemap = generateCategoriesSitemap(baseUrl, categories);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(sitemap);
+      } catch (err: any) {
+        console.error('sitemap-categories.xml error:', err);
+        res.status(500).send('Error generating categories sitemap');
+      }
+    });
+
+    app.get("/sitemap-images.xml", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let products: any[] = [];
+        let categories: any[] = [];
+        let logo = '';
+
+        if (db) {
+          const [pRes, cRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('categories') as any).select('*').order('name'),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          categories = cRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            if (row.setting_key === 'store_logo' && row.setting_value) logo = row.setting_value;
+          });
+        }
+
+        const sitemap = generateImagesSitemap(baseUrl, products, categories, logo);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(sitemap);
+      } catch (err: any) {
+        console.error('sitemap-images.xml error:', err);
+        res.status(500).send('Error generating image sitemap');
+      }
+    });
+
+    app.get("/sitemap-pages.xml", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+        const sitemap = generatePagesSitemap(baseUrl);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(sitemap);
+      } catch (err: any) {
+        console.error('sitemap-pages.xml error:', err);
+        res.status(500).send('Error generating pages sitemap');
+      }
+    });
+
+    app.get(["/feed.xml", "/rss.xml"], async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let storeName = 'SHM Gadget Zone';
+        let storeDesc = 'Authentic electronics & gadgets catalog for Bangladesh';
+        let products: any[] = [];
+
+        if (db) {
+          const [pRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*)').order('created_at', { ascending: false }).limit(50),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+            if (row.setting_key === 'seo_description' && row.setting_value) storeDesc = row.setting_value;
+          });
+        }
+
+        const rss = generateRssFeed(baseUrl, storeName, storeDesc, products);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(rss);
+      } catch (err: any) {
+        console.error('RSS feed error:', err);
+        res.status(500).send('Error generating RSS feed');
+      }
+    });
+
+    app.get(["/google-merchant-feed.xml", "/api/seo/google-merchant-feed.xml"], async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let storeName = 'SHM Gadget Zone';
+        let products: any[] = [];
+
+        if (db) {
+          const [pRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*)').order('created_at', { ascending: false }),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+          });
+        }
+
+        const feed = generateGoogleMerchantFeed(baseUrl, storeName, products);
+        res.setHeader('Content-Type', 'application/xml; charset=utf-8');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.send(feed);
+      } catch (err: any) {
+        console.error('Google merchant feed error:', err);
+        res.status(500).send('Error generating Google Merchant feed');
+      }
+    });
+
+    app.get("/api/admin/seo/audit", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let products: any[] = [];
+        let categories: any[] = [];
+        let settingsMap: Record<string, string> = {};
+
+        if (db) {
+          const [pRes, cRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('categories') as any).select('*').order('name'),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          products = pRes.data || [];
+          categories = cRes.data || [];
+          (sRes.data || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
+          });
+        }
+
+        const report = runSeoAudit(products, categories, settingsMap);
+        res.json({ success: true, ...report });
+      } catch (err: any) {
+        console.error('SEO audit error:', err);
+        res.status(500).json({ error: err.message || 'Failed to generate SEO audit report' });
+      }
+    });
+
+    app.get("/api/admin/seo/stats", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let totalProducts = 0;
+        let totalCategories = 0;
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+
+        if (db) {
+          const [pRes, cRes, sRes] = await Promise.all([
+            (db.from('products') as any).select('id', { count: 'exact', head: true }),
+            (db.from('categories') as any).select('id', { count: 'exact', head: true }),
+            (db.from('store_settings') as any).select('*')
+          ]);
+          totalProducts = pRes.count || 0;
+          totalCategories = cRes.count || 0;
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+
+        const sitemaps = [
+          { name: 'Master Sitemap Index', url: `${baseUrl}/sitemap.xml`, format: 'XML' },
+          { name: 'Products Sitemap', url: `${baseUrl}/sitemap-products.xml`, format: 'XML' },
+          { name: 'Categories Sitemap', url: `${baseUrl}/sitemap-categories.xml`, format: 'XML' },
+          { name: 'Google Images Sitemap', url: `${baseUrl}/sitemap-images.xml`, format: 'XML' },
+          { name: 'Static Pages Sitemap', url: `${baseUrl}/sitemap-pages.xml`, format: 'XML' },
+          { name: 'Google Merchant Catalog', url: `${baseUrl}/google-merchant-feed.xml`, format: 'Google XML' },
+          { name: 'RSS Catalog Feed', url: `${baseUrl}/feed.xml`, format: 'RSS 2.0' },
+          { name: 'Robots.txt Rules', url: `${baseUrl}/robots.txt`, format: 'TXT' }
+        ];
+
+        res.json({
+          success: true,
+          totalProducts,
+          totalCategories,
+          totalIndexedUrls: totalProducts + totalCategories + 6,
+          baseUrl,
+          sitemaps
+        });
+      } catch (err: any) {
+        console.error('SEO stats error:', err);
+        res.status(500).json({ error: err.message || 'Failed to load SEO stats' });
+      }
+    });
+
+    app.post("/api/admin/seo/ping", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          });
+        }
+
+        const sitemapUrl = `${baseUrl}/sitemap.xml`;
+        const results = await pingSearchEngines(sitemapUrl);
+        res.json({
+          success: true,
+          sitemapUrl,
+          timestamp: new Date().toISOString(),
+          results
+        });
+      } catch (err: any) {
+        console.error('Search engine ping error:', err);
+        res.status(500).json({ error: err.message || 'Failed to ping search engines' });
+      }
+    });
+
     async function renderHtmlWithSEO(req: any, res: any, customMeta?: { 
       title?: string; 
       description?: string; 
       keywords?: string | string[]; 
       image?: string; 
       url?: string;
+      breadcrumbs?: Array<{ name: string; url: string }>;
       productSchema?: {
         name: string;
         description: string;
@@ -2390,6 +2723,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         sku?: string;
         price?: number | string;
         inStock?: boolean;
+        categoryName?: string;
       }
     }) {
       try {
@@ -2405,11 +2739,23 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         const storeName = settingsMap['store_name'] || 'SHM Gadget Zone';
         const baseUrl = settingsMap['seo_site_url'] || `${req.protocol}://${req.get('host')}`;
         
-        const title = customMeta?.title || settingsMap['seo_title'] || `${storeName} | Quality Gadgets & Tech in Bangladesh`;
-        const description = customMeta?.description || settingsMap['seo_description'] || 'Shop genuine electronics, smart gadgets, and mobile accessories in Bangladesh with nationwide express delivery.';
-        const keywordsStr = Array.isArray(customMeta?.keywords) ? customMeta.keywords.join(', ') : (customMeta?.keywords || settingsMap['seo_keywords'] || 'gadgets bd, electronics bangladesh, online shopping bd, shm gadget zone');
+        const title = customMeta?.title || settingsMap['seo_title'] || `${storeName} | Authentic Electronics & Gadgets Bangladesh`;
+        const description = customMeta?.description || settingsMap['seo_description'] || 'Shop genuine smart gadgets, mobile accessories, audio gear, and lifestyle electronics in Bangladesh with nationwide express delivery.';
+        const keywordsStr = Array.isArray(customMeta?.keywords) ? customMeta.keywords.join(', ') : (customMeta?.keywords || settingsMap['seo_keywords'] || 'gadgets bd, electronics bangladesh, online shopping bd, shm gadget zone, authentic gadgets dhaka');
         const image = customMeta?.image || settingsMap['seo_og_image'] || settingsMap['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
         const url = customMeta?.url || `${baseUrl}${req.originalUrl || '/'}`;
+
+        // Verification codes
+        const gscCode = settingsMap['seo_google_verification'] || '';
+        const bingCode = settingsMap['seo_bing_verification'] || '';
+        const ga4Id = settingsMap['seo_ga4_id'] || '';
+        const gtmId = settingsMap['seo_gtm_id'] || '';
+        const pixelId = settingsMap['seo_meta_pixel_id'] || '';
+
+        // Geo settings for Bangladesh Local SEO
+        const geoRegion = settingsMap['seo_geo_region'] || 'BD-13';
+        const geoPlacename = settingsMap['seo_geo_placename'] || 'Dhaka, Bangladesh';
+        const geoPosition = settingsMap['seo_geo_position'] || '23.8103;90.4125';
 
         let html = '';
         const distHtmlPath = path.join(process.cwd(), 'dist', 'index.html');
@@ -2420,19 +2766,84 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         } else if (fs.existsSync(srcHtmlPath)) {
           html = fs.readFileSync(srcHtmlPath, 'utf8');
         } else {
-          html = `<!doctype html><html><head><title>${title}</title></head><body><div id="root"></div></body></html>`;
+          html = `<!doctype html><html lang="en"><head><title>${title}</title></head><body><div id="root"></div></body></html>`;
         }
 
-        let jsonLdScript = '';
+        // Build Structured Data (JSON-LD)
+        const schemas: any[] = [];
+
+        // 1. WebSite Schema with Sitelinks SearchBox
+        schemas.push({
+          "@context": "https://schema.org",
+          "@type": "WebSite",
+          "name": storeName,
+          "url": baseUrl,
+          "potentialAction": {
+            "@type": "SearchAction",
+            "target": `${baseUrl}/shop?search={search_term_string}`,
+            "query-input": "required name=search_term_string"
+          }
+        });
+
+        // 2. OnlineStore / LocalBusiness Schema
+        schemas.push({
+          "@context": "https://schema.org",
+          "@type": "OnlineStore",
+          "name": storeName,
+          "url": baseUrl,
+          "logo": settingsMap['store_logo'] || image,
+          "image": image,
+          "description": description,
+          "telephone": settingsMap['store_phone'] || "+8801700000000",
+          "email": settingsMap['store_email'] || "support@shmgadgetzone.com",
+          "priceRange": "৳৳",
+          "currenciesAccepted": "BDT",
+          "paymentAccepted": "Cash on Delivery, bKash, Nagad, Credit Card",
+          "address": {
+            "@type": "PostalAddress",
+            "streetAddress": settingsMap['store_address'] || "Gulshan-2",
+            "addressLocality": "Dhaka",
+            "addressRegion": "Dhaka",
+            "postalCode": "1212",
+            "addressCountry": "BD"
+          },
+          "geo": {
+            "@type": "GeoCoordinates",
+            "latitude": "23.8103",
+            "longitude": "90.4125"
+          },
+          "sameAs": [
+            settingsMap['social_facebook'] || "https://facebook.com",
+            settingsMap['social_instagram'] || "https://instagram.com",
+            settingsMap['social_youtube'] || "https://youtube.com"
+          ].filter(Boolean)
+        });
+
+        // 3. BreadcrumbList Schema
+        if (customMeta?.breadcrumbs && customMeta.breadcrumbs.length > 0) {
+          schemas.push({
+            "@context": "https://schema.org",
+            "@type": "BreadcrumbList",
+            "itemListElement": customMeta.breadcrumbs.map((b, idx) => ({
+              "@type": "ListItem",
+              "position": idx + 1,
+              "name": b.name,
+              "item": b.url
+            }))
+          });
+        }
+
+        // 4. Product Schema
         if (customMeta?.productSchema) {
           const ps = customMeta.productSchema;
-          const schemaObj = {
+          schemas.push({
             "@context": "https://schema.org/",
             "@type": "Product",
             "name": ps.name,
             "image": [ps.image],
             "description": ps.description,
             "sku": ps.sku || undefined,
+            "category": ps.categoryName || undefined,
             "brand": {
               "@type": "Brand",
               "name": storeName
@@ -2442,38 +2853,79 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
               "url": url,
               "priceCurrency": "BDT",
               "price": ps.price ? String(ps.price) : "0",
+              "priceValidUntil": new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+              "itemCondition": "https://schema.org/NewCondition",
               "availability": ps.inStock !== false ? "https://schema.org/InStock" : "https://schema.org/OutOfStock",
               "seller": {
                 "@type": "Organization",
                 "name": storeName
               }
             }
-          };
-          jsonLdScript = `\n  <script type="application/ld+json">\n${JSON.stringify(schemaObj, null, 2)}\n  </script>`;
+          });
         }
 
+        const jsonLdScript = `\n  <script type="application/ld+json">\n${JSON.stringify(schemas, null, 2)}\n  </script>`;
+
+        // Verification & Tracking tags
+        let verificationTags = '';
+        if (gscCode) {
+          verificationTags += `\n  <meta name="google-site-verification" content="${gscCode}" />`;
+        }
+        if (bingCode) {
+          verificationTags += `\n  <meta name="msvalidate.01" content="${bingCode}" />`;
+        }
+
+        // Google Analytics 4 Script
+        let gaScript = '';
+        if (ga4Id) {
+          gaScript = `
+  <script async src="https://www.googletagmanager.com/gtag/js?id=${ga4Id}"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+    gtag('config', '${ga4Id}');
+  </script>`;
+        }
+
+        // Meta Tags bundle
         const metaTags = `
-          <title>${title}</title>
-          <meta name="description" content="${description}" />
-          <meta name="keywords" content="${keywordsStr}" />
-          <link rel="canonical" href="${url}" />
-          <meta property="og:title" content="${title}" />
-          <meta property="og:description" content="${description}" />
-          <meta property="og:image" content="${image}" />
-          <meta property="og:url" content="${url}" />
-          <meta property="og:type" content="website" />
-          <meta property="og:site_name" content="${storeName}" />
-          <meta name="twitter:card" content="summary_large_image" />
-          <meta name="twitter:title" content="${title}" />
-          <meta name="twitter:description" content="${description}" />
-          <meta name="twitter:image" content="${image}" />${jsonLdScript}
-        `;
+  <title>${title}</title>
+  <meta name="description" content="${description}" />
+  <meta name="keywords" content="${keywordsStr}" />
+  <link rel="canonical" href="${url}" />
+  <link rel="alternate" hreflang="en-bd" href="${url}" />
+  <link rel="alternate" hreflang="bn-bd" href="${url}" />
+  <link rel="alternate" hreflang="x-default" href="${url}" />
+  
+  <!-- Bangladesh Local SEO Meta -->
+  <meta name="geo.region" content="${geoRegion}" />
+  <meta name="geo.placename" content="${geoPlacename}" />
+  <meta name="geo.position" content="${geoPosition}" />
+  <meta name="ICBM" content="${geoPosition.replace(';', ', ')}" />
+
+  <!-- OpenGraph Meta -->
+  <meta property="og:title" content="${title}" />
+  <meta property="og:description" content="${description}" />
+  <meta property="og:image" content="${image}" />
+  <meta property="og:url" content="${url}" />
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="${storeName}" />
+  <meta property="og:locale" content="en_US" />
+  <meta property="og:locale:alternate" content="bn_BD" />
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:title" content="${title}" />
+  <meta name="twitter:description" content="${description}" />
+  <meta name="twitter:image" content="${image}" />${verificationTags}${jsonLdScript}${gaScript}
+`;
 
         html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`);
-        html = html.replace(/<meta\s+(?:property|name)=["'](og:|twitter:|description|keywords)[^>]*?>/gi, '');
+        html = html.replace(/<meta\s+(?:property|name)=["'](og:|twitter:|description|keywords|geo\.|ICBM|google-site-verification|msvalidate)[^>]*?>/gi, '');
         html = html.replace('</head>', `${metaTags}\n</head>`);
 
-        res.setHeader('Content-Type', 'text/html');
+        res.setHeader('Content-Type', 'text/html; charset=utf-8');
         res.send(html);
       } catch (err) {
         console.error('SEO HTML render error:', err);
@@ -2492,24 +2944,34 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         const slug = req.params.slug;
         if (db) {
           const { data: product } = await (db.from('products') as any)
-            .select('*, product_images(*)')
+            .select('*, product_images(*), categories(*)')
             .or(`slug.eq.${slug},id.eq.${slug}`)
             .maybeSingle();
 
           if (product) {
             const img = product.image_url || product.imageUrl || (product.product_images?.[0]?.image_url) || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
             const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
-            const desc = product.short_description || product.description?.replace(/<[^>]*>?/gm, '') || `Buy ${product.name} at best price in Bangladesh.`;
+            const desc = product.seo_description || product.short_description || product.description?.replace(/<[^>]*>?/gm, '') || `Buy ${product.name} at best price in Bangladesh.`;
+            const seoTitle = product.seo_title || `${product.name} Price in BD | SHM Gadget Zone`;
+            const price = Number(product.price || 0).toLocaleString();
+
             return renderHtmlWithSEO(req, res, {
-              title: `${product.name} Price in BD | SHM Gadget Zone`,
+              title: `${seoTitle} - ৳${price}`,
               description: desc.slice(0, 160),
+              keywords: product.seo_keywords || [product.name, `${product.name} price in bd`, 'gadgets bangladesh'],
               image: absoluteImg,
               url: `${req.protocol}://${req.get('host')}/product/${slug}`,
+              breadcrumbs: [
+                { name: 'Home', url: `${req.protocol}://${req.get('host')}/` },
+                { name: 'Shop', url: `${req.protocol}://${req.get('host')}/shop` },
+                { name: product.name, url: `${req.protocol}://${req.get('host')}/product/${slug}` }
+              ],
               productSchema: {
                 name: product.name,
                 description: desc.slice(0, 300),
                 image: absoluteImg,
                 sku: product.sku,
+                categoryName: product.categories?.name,
                 price: product.price,
                 inStock: (product.stock_quantity ?? 1) > 0
               }
@@ -2536,10 +2998,15 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
             const img = cat.image_url || cat.imageUrl || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
             const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
             return renderHtmlWithSEO(req, res, {
-              title: `${cat.name} Collection | SHM Gadget Zone`,
-              description: cat.description || `Explore ${cat.name} collection at SHM Gadget Zone Bangladesh.`,
+              title: `${cat.name} Price in Bangladesh | SHM Gadget Zone`,
+              description: cat.description || `Explore genuine ${cat.name} with official warranty and nationwide delivery across Bangladesh.`,
               image: absoluteImg,
-              url: `${req.protocol}://${req.get('host')}/#/category/${slug}`
+              url: `${req.protocol}://${req.get('host')}/category/${slug}`,
+              breadcrumbs: [
+                { name: 'Home', url: `${req.protocol}://${req.get('host')}/` },
+                { name: 'Categories', url: `${req.protocol}://${req.get('host')}/shop` },
+                { name: cat.name, url: `${req.protocol}://${req.get('host')}/category/${slug}` }
+              ]
             });
           }
         }

@@ -1,0 +1,38 @@
+# ==============================================================================
+# Static Fallback Robots.txt for SHM Gadget Zone / Hyperdrive Bangladesh
+# Real-time dynamic rules are served by Express at /robots.txt
+# ==============================================================================
+
+User-agent: *
+Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /category/
+Allow: /track
+Allow: /feed.xml
+Allow: /google-merchant-feed.xml
+
+Disallow: /admin/
+Disallow: /api/admin/
+Disallow: /api/private/
+Disallow: /checkout/
+Disallow: /cart
+Disallow: /account/
+
+User-agent: Googlebot
+Allow: /
+Disallow: /admin/
+Disallow: /api/admin/
+Disallow: /checkout/
+
+User-agent: Bingbot
+Allow: /
+Disallow: /admin/
+Disallow: /api/admin/
+Crawl-delay: 1
+
+Sitemap: /sitemap.xml
+Sitemap: /sitemap-products.xml
+Sitemap: /sitemap-categories.xml
+Sitemap: /sitemap-images.xml

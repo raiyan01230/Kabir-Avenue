@@ -129,10 +129,28 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setMetaTag('name', 'twitter:site', twitterHandle);
   setMetaTag('name', 'twitter:creator', twitterHandle);
 
-  // 5. Canonical Link
+  // 5. Canonical Link & Hreflang
   setLinkTag('canonical', seo.canonicalUrl || finalOgUrl);
+  setLinkTag('alternate', seo.canonicalUrl || finalOgUrl);
 
-  // 6. Favicon if configured in settings
+  // 6. Bangladesh Local SEO Meta
+  const geoRegion = globalSettings?.['seo_geo_region'] || 'BD-13';
+  const geoPlacename = globalSettings?.['seo_geo_placename'] || 'Dhaka, Bangladesh';
+  const geoPosition = globalSettings?.['seo_geo_position'] || '23.8103;90.4125';
+  setMetaTag('name', 'geo.region', geoRegion);
+  setMetaTag('name', 'geo.placename', geoPlacename);
+  setMetaTag('name', 'geo.position', geoPosition);
+  setMetaTag('name', 'ICBM', geoPosition.replace(';', ', '));
+
+  // 7. Search Console Verification if set
+  if (globalSettings?.['seo_google_verification']) {
+    setMetaTag('name', 'google-site-verification', globalSettings['seo_google_verification']);
+  }
+  if (globalSettings?.['seo_bing_verification']) {
+    setMetaTag('name', 'msvalidate.01', globalSettings['seo_bing_verification']);
+  }
+
+  // 8. Favicon if configured in settings
   const faviconUrl = globalSettings?.['store_favicon'] || globalSettings?.['favicon_url'] || globalSettings?.['favicon'];
   if (faviconUrl) {
     setLinkTag('icon', faviconUrl);
