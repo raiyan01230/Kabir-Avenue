@@ -2709,6 +2709,49 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       }
     });
 
+    app.get("/api/admin/seo/verify-live", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let settingsMap: Record<string, string> = {};
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
+          });
+        }
+
+        const rawGsc = settingsMap['seo_google_verification'] || '';
+        let cleanToken = rawGsc.trim();
+        const match = cleanToken.match(/content=["']([^"']+)["']/i);
+        if (match) cleanToken = match[1];
+        cleanToken = cleanToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+
+        const rawBing = settingsMap['seo_bing_verification'] || '';
+        let cleanBing = rawBing.trim();
+        const bMatch = cleanBing.match(/content=["']([^"']+)["']/i);
+        if (bMatch) cleanBing = bMatch[1];
+        cleanBing = cleanBing.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+
+        res.json({
+          success: true,
+          google: {
+            configured: !!cleanToken,
+            token: cleanToken,
+            metaHtml: cleanToken ? `<meta name="google-site-verification" content="${cleanToken}" />` : null
+          },
+          bing: {
+            configured: !!cleanBing,
+            token: cleanBing,
+            metaHtml: cleanBing ? `<meta name="msvalidate.01" content="${cleanBing}" />` : null
+          },
+          baseUrl: settingsMap['seo_site_url'] || `${req.protocol}://${req.get('host')}`,
+          storeName: settingsMap['store_name'] || 'SHM Gadget Zone'
+        });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to verify live SEO tags' });
+      }
+    });
+
     async function renderHtmlWithSEO(req: any, res: any, customMeta?: { 
       title?: string; 
       description?: string; 
@@ -2725,7 +2768,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         inStock?: boolean;
         categoryName?: string;
       }
-    }) {
+    }, existingHtml?: string) {
       try {
         const db = getSupabaseAdmin();
         let settingsMap: Record<string, string> = {};
@@ -2745,28 +2788,52 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         const image = customMeta?.image || settingsMap['seo_og_image'] || settingsMap['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
         const url = customMeta?.url || `${baseUrl}${req.originalUrl || '/'}`;
 
-        // Verification codes
-        const gscCode = settingsMap['seo_google_verification'] || '';
-        const bingCode = settingsMap['seo_bing_verification'] || '';
-        const ga4Id = settingsMap['seo_ga4_id'] || '';
-        const gtmId = settingsMap['seo_gtm_id'] || '';
-        const pixelId = settingsMap['seo_meta_pixel_id'] || '';
+        // Robust verification code extraction (extracts token whether user pasted raw code or full <meta .../> tag)
+        let gscCode = (settingsMap['seo_google_verification'] || '').trim();
+        if (gscCode) {
+          const gMatch = gscCode.match(/content=["']([^"']+)["']/i);
+          if (gMatch) gscCode = gMatch[1];
+          gscCode = gscCode.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+        }
+
+        let bingCode = (settingsMap['seo_bing_verification'] || '').trim();
+        if (bingCode) {
+          const bMatch = bingCode.match(/content=["']([^"']+)["']/i);
+          if (bMatch) bingCode = bMatch[1];
+          bingCode = bingCode.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+        }
+
+        let ga4Id = (settingsMap['seo_ga4_id'] || '').trim();
+        if (ga4Id) {
+          const gaMatch = ga4Id.match(/G-[A-Z0-9]+/i);
+          if (gaMatch) ga4Id = gaMatch[0];
+        }
+
+        let gtmId = (settingsMap['seo_gtm_id'] || '').trim();
+        if (gtmId) {
+          const gtmMatch = gtmId.match(/GTM-[A-Z0-9]+/i);
+          if (gtmMatch) gtmId = gtmMatch[0];
+        }
+
+        const pixelId = (settingsMap['seo_meta_pixel_id'] || '').trim().replace(/[^0-9]/g, '');
 
         // Geo settings for Bangladesh Local SEO
         const geoRegion = settingsMap['seo_geo_region'] || 'BD-13';
         const geoPlacename = settingsMap['seo_geo_placename'] || 'Dhaka, Bangladesh';
         const geoPosition = settingsMap['seo_geo_position'] || '23.8103;90.4125';
 
-        let html = '';
-        const distHtmlPath = path.join(process.cwd(), 'dist', 'index.html');
-        const srcHtmlPath = path.join(process.cwd(), 'index.html');
+        let html = existingHtml || '';
+        if (!html) {
+          const distHtmlPath = path.join(process.cwd(), 'dist', 'index.html');
+          const srcHtmlPath = path.join(process.cwd(), 'index.html');
 
-        if (process.env.NODE_ENV === 'production' && fs.existsSync(distHtmlPath)) {
-          html = fs.readFileSync(distHtmlPath, 'utf8');
-        } else if (fs.existsSync(srcHtmlPath)) {
-          html = fs.readFileSync(srcHtmlPath, 'utf8');
-        } else {
-          html = `<!doctype html><html lang="en"><head><title>${title}</title></head><body><div id="root"></div></body></html>`;
+          if (process.env.NODE_ENV === 'production' && fs.existsSync(distHtmlPath)) {
+            html = fs.readFileSync(distHtmlPath, 'utf8');
+          } else if (fs.existsSync(srcHtmlPath)) {
+            html = fs.readFileSync(srcHtmlPath, 'utf8');
+          } else {
+            html = `<!doctype html><html lang="en"><head><title>${title}</title></head><body><div id="root"></div></body></html>`;
+          }
         }
 
         // Build Structured Data (JSON-LD)
@@ -3019,9 +3086,26 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
-      appType: "spa",
+      appType: "custom",
     });
     app.use(vite.middlewares);
+
+    app.get('*', async (req, res, next) => {
+      const url = req.originalUrl || req.url;
+      if (url.startsWith('/api') || url.startsWith('/@') || url.startsWith('/node_modules') || url.startsWith('/src') || url.match(/\.(js|ts|tsx|jsx|css|json|png|jpg|jpeg|gif|svg|ico|webp|woff|woff2|ttf|eot)$/i)) {
+        return next();
+      }
+      try {
+        const templatePath = path.resolve(process.cwd(), 'index.html');
+        let template = fs.readFileSync(templatePath, 'utf-8');
+        template = await vite.transformIndexHtml(url, template);
+        return renderHtmlWithSEO(req, res, undefined, template);
+      } catch (e: any) {
+        if (vite) vite.ssrFixStacktrace(e);
+        console.error('Vite dev HTML render error:', e);
+        return renderHtmlWithSEO(req, res);
+      }
+    });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));

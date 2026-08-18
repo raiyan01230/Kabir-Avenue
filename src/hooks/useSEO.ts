@@ -144,10 +144,18 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
 
   // 7. Search Console Verification if set
   if (globalSettings?.['seo_google_verification']) {
-    setMetaTag('name', 'google-site-verification', globalSettings['seo_google_verification']);
+    let gToken = globalSettings['seo_google_verification'].trim();
+    const gMatch = gToken.match(/content=["']([^"']+)["']/i);
+    if (gMatch) gToken = gMatch[1];
+    gToken = gToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+    if (gToken) setMetaTag('name', 'google-site-verification', gToken);
   }
   if (globalSettings?.['seo_bing_verification']) {
-    setMetaTag('name', 'msvalidate.01', globalSettings['seo_bing_verification']);
+    let bToken = globalSettings['seo_bing_verification'].trim();
+    const bMatch = bToken.match(/content=["']([^"']+)["']/i);
+    if (bMatch) bToken = bMatch[1];
+    bToken = bToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+    if (bToken) setMetaTag('name', 'msvalidate.01', bToken);
   }
 
   // 8. Favicon if configured in settings

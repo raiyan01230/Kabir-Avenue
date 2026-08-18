@@ -219,6 +219,38 @@ export default function AdminSEO() {
     }
   };
 
+  const [liveVerificationResult, setLiveVerificationResult] = useState<any>(null);
+  const [verifyingLive, setVerifyingLive] = useState(false);
+
+  // Helper to extract clean token if user pastes full <meta .../> tag or raw code
+  const cleanGoogleToken = (val: string) => {
+    let raw = val.trim();
+    const match = raw.match(/content=["']([^"']+)["']/i);
+    if (match) return match[1].trim();
+    return raw.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+  };
+
+  const cleanBingToken = (val: string) => {
+    let raw = val.trim();
+    const match = raw.match(/content=["']([^"']+)["']/i);
+    if (match) return match[1].trim();
+    return raw.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+  };
+
+  const handleTestLiveVerification = async () => {
+    setVerifyingLive(true);
+    try {
+      await handleSave();
+      const res = await fetch('/api/admin/seo/verify-live');
+      const data = await res.json();
+      setLiveVerificationResult(data);
+    } catch {
+      setLiveVerificationResult({ error: 'Failed to test live verification' });
+    } finally {
+      setVerifyingLive(false);
+    }
+  };
+
   const handleLoadRobotsPreset = () => {
     const preset = `# Standard Googlebot & Search Engine Indexing Rules for Bangladesh
 User-agent: *
@@ -615,65 +647,148 @@ Crawl-delay: 1`;
       {/* Tab 2: Webmaster Verification & Tracking */}
       {activeTab === 'webmaster' && (
         <form onSubmit={handleSave} className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-6">
-          <div className="pb-3 border-b border-slate-800">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Search Engine Webmaster Verification &amp; Tracking Codes</span>
-            </h2>
-            <p className="text-xs text-slate-400 mt-0.5">
-              Claim ownership of your website in Google Search Console, Bing Webmaster, and inject Google Analytics 4 tags
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-800">
+            <div>
+              <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                <ShieldCheck className="w-4 h-4 text-emerald-400" />
+                <span>Search Engine Webmaster Verification &amp; Tracking Codes</span>
+              </h2>
+              <p className="text-xs text-slate-400 mt-0.5">
+                Claim ownership of your website in Google Search Console, Bing Webmaster, and inject Google Analytics 4 tags
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleTestLiveVerification}
+              disabled={verifyingLive}
+              className="px-4 py-2 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-400 font-bold text-xs rounded-xl transition border border-emerald-500/30 flex items-center gap-2"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${verifyingLive ? 'animate-spin' : ''}`} />
+              <span>{verifyingLive ? 'Testing Live Meta Tag...' : 'Test Live Verification in HTML Head'}</span>
+            </button>
           </div>
+
+          {liveVerificationResult && (
+            <div className="p-4 bg-slate-950 border border-emerald-500/30 rounded-xl space-y-2">
+              <div className="flex items-center gap-2 text-xs font-bold text-emerald-400">
+                <CheckCircle2 className="w-4 h-4" />
+                <span>Live Website HTML &lt;head&gt; Verification Test Results:</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                  <div className="text-[11px] font-semibold text-slate-400 mb-1">Google Search Console:</div>
+                  {liveVerificationResult.google?.configured ? (
+                    <div className="space-y-1">
+                      <div className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                        <span>Active in Live HTML &lt;head&gt;</span>
+                      </div>
+                      <code className="text-slate-300 font-mono text-[10px] block break-all bg-slate-950 p-1.5 rounded">
+                        {liveVerificationResult.google.metaHtml}
+                      </code>
+                    </div>
+                  ) : (
+                    <div className="text-amber-400 text-[11px]">No Google verification token configured yet.</div>
+                  )}
+                </div>
+
+                <div className="p-3 bg-slate-900 border border-slate-800 rounded-lg">
+                  <div className="text-[11px] font-semibold text-slate-400 mb-1">Bing Webmaster Tools:</div>
+                  {liveVerificationResult.bing?.configured ? (
+                    <div className="space-y-1">
+                      <div className="text-emerald-400 font-mono text-[11px] flex items-center gap-1.5">
+                        <span className="w-2 h-2 rounded-full bg-emerald-400 inline-block animate-pulse"></span>
+                        <span>Active in Live HTML &lt;head&gt;</span>
+                      </div>
+                      <code className="text-slate-300 font-mono text-[10px] block break-all bg-slate-950 p-1.5 rounded">
+                        {liveVerificationResult.bing.metaHtml}
+                      </code>
+                    </div>
+                  ) : (
+                    <div className="text-slate-400 text-[11px]">Not configured (optional).</div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="space-y-4">
-              <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1 flex items-center justify-between">
-                  <span>Google Search Console Verification Token</span>
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span className="flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+                    <span>Google Search Console Verification</span>
+                  </span>
                   <a
                     href="https://search.google.com/search-console"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1 font-normal"
                   >
                     <span>Open Search Console</span>
                     <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </label>
-                <p className="text-[11px] text-slate-400 mb-1.5">
-                  Paste only the code token inside <code className="text-slate-300">content=&quot;...&quot;</code> from Google HTML tag method.
+                <p className="text-[11px] text-slate-400">
+                  Paste the full HTML tag <code className="text-emerald-400">&lt;meta name=&quot;google-site-verification&quot; content=&quot;...&quot; /&gt;</code> OR just the token code.
                 </p>
                 <input
                   type="text"
                   value={settings['seo_google_verification'] || ''}
-                  placeholder="e.g. 4zY5XJ_k9wQe7m2dF1p..."
-                  onChange={e => handleChange('seo_google_verification', e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                  placeholder="e.g. 58x4iKvtWOTVs_O8HgwRU2w4SrtoYwvWCxrs50shOd4"
+                  onChange={e => {
+                    const cleaned = cleanGoogleToken(e.target.value);
+                    handleChange('seo_google_verification', cleaned);
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-emerald-400 text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
+
+                {settings['seo_google_verification'] && (
+                  <div className="pt-2 border-t border-slate-800 text-[11px] space-y-1">
+                    <div className="text-slate-400 flex items-center justify-between">
+                      <span>Live Tag Injected Into &lt;head&gt;:</span>
+                      <button
+                        type="button"
+                        onClick={() => handleCopy(`<meta name="google-site-verification" content="${cleanGoogleToken(settings['seo_google_verification'] || '')}" />`, 'gsc-tag')}
+                        className="text-emerald-400 hover:underline flex items-center gap-1 text-[10px]"
+                      >
+                        {copiedUrl === 'gsc-tag' ? 'Copied!' : 'Copy Tag'}
+                      </button>
+                    </div>
+                    <code className="block bg-slate-900 p-2 rounded text-slate-300 font-mono text-[10px] break-all border border-slate-800">
+                      &lt;meta name=&quot;google-site-verification&quot; content=&quot;{cleanGoogleToken(settings['seo_google_verification'] || '')}&quot; /&gt;
+                    </code>
+                  </div>
+                )}
               </div>
 
-              <div>
-                <label className="block text-xs font-bold text-slate-200 mb-1 flex items-center justify-between">
-                  <span>Bing Webmaster Verification Code</span>
+              <div className="p-4 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                <label className="block text-xs font-bold text-slate-200 flex items-center justify-between">
+                  <span>Bing Webmaster Verification</span>
                   <a
                     href="https://www.bing.com/webmasters"
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1"
+                    className="text-[11px] text-sky-400 hover:underline flex items-center gap-1 font-normal"
                   >
                     <span>Open Bing Webmaster</span>
                     <ExternalLink className="w-2.5 h-2.5" />
                   </a>
                 </label>
-                <p className="text-[11px] text-slate-400 mb-1.5">
-                  Token for <code className="text-slate-300">&lt;meta name=&quot;msvalidate.01&quot; content=&quot;...&quot;&gt;</code>
+                <p className="text-[11px] text-slate-400">
+                  Paste the full tag <code className="text-sky-400">&lt;meta name=&quot;msvalidate.01&quot; content=&quot;...&quot;&gt;</code> or token.
                 </p>
                 <input
                   type="text"
                   value={settings['seo_bing_verification'] || ''}
                   placeholder="e.g. 7D284091B842F85A27..."
-                  onChange={e => handleChange('seo_bing_verification', e.target.value)}
-                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
+                  onChange={e => {
+                    const cleaned = cleanBingToken(e.target.value);
+                    handleChange('seo_bing_verification', cleaned);
+                  }}
+                  className="w-full px-3.5 py-2.5 bg-slate-900 border border-slate-700 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
               </div>
 
@@ -682,12 +797,12 @@ Crawl-delay: 1`;
                   Canonical Base URL (<code className="text-slate-300">rel=&quot;canonical&quot;</code>)
                 </label>
                 <p className="text-[11px] text-slate-400 mb-1.5">
-                  Your primary official store domain name for all canonical links.
+                  Your primary official store domain name for all canonical search indexing.
                 </p>
                 <input
                   type="url"
                   value={settings['seo_site_url'] || ''}
-                  placeholder="https://yourstore.com"
+                  placeholder="https://shmgadgetzone.onrender.com"
                   onChange={e => handleChange('seo_site_url', e.target.value)}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
@@ -706,7 +821,11 @@ Crawl-delay: 1`;
                   type="text"
                   value={settings['seo_ga4_id'] || ''}
                   placeholder="e.g. G-XXXXXXXXXX"
-                  onChange={e => handleChange('seo_ga4_id', e.target.value)}
+                  onChange={e => {
+                    const raw = e.target.value.trim();
+                    const m = raw.match(/G-[A-Z0-9]+/i);
+                    handleChange('seo_ga4_id', m ? m[0] : raw);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
               </div>
@@ -722,7 +841,11 @@ Crawl-delay: 1`;
                   type="text"
                   value={settings['seo_gtm_id'] || ''}
                   placeholder="e.g. GTM-XXXXXXX"
-                  onChange={e => handleChange('seo_gtm_id', e.target.value)}
+                  onChange={e => {
+                    const raw = e.target.value.trim();
+                    const m = raw.match(/GTM-[A-Z0-9]+/i);
+                    handleChange('seo_gtm_id', m ? m[0] : raw);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
               </div>
@@ -738,9 +861,22 @@ Crawl-delay: 1`;
                   type="text"
                   value={settings['seo_meta_pixel_id'] || ''}
                   placeholder="e.g. 123456789012345"
-                  onChange={e => handleChange('seo_meta_pixel_id', e.target.value)}
+                  onChange={e => {
+                    const raw = e.target.value.trim().replace(/[^0-9]/g, '');
+                    handleChange('seo_meta_pixel_id', raw);
+                  }}
                   className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:border-emerald-500 focus:outline-none"
                 />
+              </div>
+
+              <div className="pt-2">
+                <button
+                  type="submit"
+                  className="w-full py-3 bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs rounded-xl transition flex items-center justify-center gap-2 shadow-lg shadow-emerald-600/20"
+                >
+                  <Save className="w-4 h-4" />
+                  <span>Save All Verification &amp; Tracking Codes</span>
+                </button>
               </div>
             </div>
           </div>
