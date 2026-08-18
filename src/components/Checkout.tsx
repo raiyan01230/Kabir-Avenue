@@ -17,6 +17,7 @@ import {
   Tag, 
   X, 
   ArrowLeft,
+  ArrowRight,
   Lock,
   ShoppingBag,
   Sparkles,
@@ -292,6 +293,39 @@ export default function Checkout() {
       setSubmitting(false);
     }
   };
+
+  if (!user) {
+    return (
+      <div className="min-h-[70vh] flex items-center justify-center px-4 py-12">
+        <div className="max-w-md w-full bg-white rounded-2xl shadow-xl border border-slate-200/80 p-8 text-center space-y-6">
+          <div className="w-16 h-16 bg-emerald-50 text-emerald-600 rounded-2xl mx-auto flex items-center justify-center shadow-inner">
+            <Lock className="w-8 h-8" />
+          </div>
+          <div className="space-y-2">
+            <h1 className="text-2xl font-black text-slate-900">Login Required to Order</h1>
+            <p className="text-sm text-slate-600 leading-relaxed">
+              You must be signed in to your SHM Gadget Zone account to place orders, track deliveries, and view purchase history.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-3">
+            <Link
+              to="/login"
+              className="w-full py-4 bg-slate-900 hover:bg-slate-800 text-white font-bold text-sm rounded-xl transition shadow-lg shadow-slate-900/10 flex items-center justify-center gap-2"
+            >
+              <span>Sign In or Create Account</span>
+              <ArrowRight className="w-4 h-4" />
+            </Link>
+            <Link
+              to="/"
+              className="w-full py-3 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl transition"
+            >
+              Continue Browsing Store
+            </Link>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (loading || (isCartLoading && activeItems.length === 0)) {
     return (
