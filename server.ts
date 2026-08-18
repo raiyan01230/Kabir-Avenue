@@ -1,6 +1,7 @@
 import 'dotenv/config';
 import express from "express";
 import path from "path";
+import fs from "fs";
 import { createServer as createViteServer } from "vite";
 import { createClient } from '@supabase/supabase-js';
 import { sendOrderConfirmation, sendAccountConfirmationEmail } from './src/lib/email';
@@ -730,7 +731,17 @@ async function startServer() {
   app.get("/api/admin/categories", async (req, res) => {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
-    const { data } = await (db.from('categories') as any).select('*').order('sort_order', { ascending: true });
+    let { data } = await (db.from('categories') as any).select('*').order('sort_order', { ascending: true });
+    if (!data || data.length === 0) {
+      const defaultCats = [
+        { name: 'Gaming & PC', slug: 'gaming-pc', description: 'High performance gaming hardware', image_url: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80', sort_order: 1, is_active: true },
+        { name: 'Peripherals', slug: 'peripherals', description: 'Keyboards, mice and audio gear', image_url: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=600&q=80', sort_order: 2, is_active: true },
+        { name: 'Smart Gadgets', slug: 'smart-gadgets', description: 'Wearables and smart tech', image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', sort_order: 3, is_active: true },
+        { name: 'Mobile & Accessories', slug: 'mobile-accessories', description: 'Chargers, cables and cases', image_url: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=600&q=80', sort_order: 4, is_active: true }
+      ];
+      const { data: seeded } = await (db.from('categories') as any).insert(defaultCats).select('*');
+      data = seeded || defaultCats;
+    }
     res.json(data || []);
   });
 
@@ -1953,8 +1964,18 @@ async function startServer() {
     try {
       const db = getSupabaseAdmin();
       if (!db) return res.json([]);
-      const { data, error } = await (db.from('categories') as any).select('*').order('sort_order', { ascending: true });
+      let { data, error } = await (db.from('categories') as any).select('*').order('sort_order', { ascending: true });
       if (error) throw error;
+      if (!data || data.length === 0) {
+        const defaultCats = [
+          { name: 'Gaming & PC', slug: 'gaming-pc', description: 'High performance gaming hardware', image_url: 'https://images.unsplash.com/photo-1587202372775-e229f172b9d7?auto=format&fit=crop&w=600&q=80', sort_order: 1, is_active: true },
+          { name: 'Peripherals', slug: 'peripherals', description: 'Keyboards, mice and audio gear', image_url: 'https://images.unsplash.com/photo-1618384887929-16ec33fab9ef?auto=format&fit=crop&w=600&q=80', sort_order: 2, is_active: true },
+          { name: 'Smart Gadgets', slug: 'smart-gadgets', description: 'Wearables and smart tech', image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?auto=format&fit=crop&w=600&q=80', sort_order: 3, is_active: true },
+          { name: 'Mobile & Accessories', slug: 'mobile-accessories', description: 'Chargers, cables and cases', image_url: 'https://images.unsplash.com/photo-1583394838336-acd977736f90?auto=format&fit=crop&w=600&q=80', sort_order: 4, is_active: true }
+        ];
+        const { data: seeded } = await (db.from('categories') as any).insert(defaultCats).select('*');
+        data = seeded || defaultCats;
+      }
       res.json(data || []);
     } catch (err: any) {
       res.status(500).json({ error: err.message });
@@ -2141,6 +2162,123 @@ async function startServer() {
     }
   });
 
+    async function renderHtmlWithSEO(req: any, res: any, customMeta?: { title?: string; description?: string; image?: string; url?: string }) {
+      try {
+        const db = getSupabaseAdmin();
+        let settingsMap: Record<string, string> = {};
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
+          });
+        }
+
+        const storeName = settingsMap['store_name'] || 'SHM Gadget Zone';
+        const baseUrl = settingsMap['seo_site_url'] || `${req.protocol}://${req.get('host')}`;
+        
+        const title = customMeta?.title || settingsMap['seo_title'] || `${storeName} | Quality Products at Great Prices`;
+        const description = customMeta?.description || settingsMap['seo_description'] || 'Shop genuine electronics, smart gadgets, and mobile accessories in Bangladesh with nationwide express delivery.';
+        const image = customMeta?.image || settingsMap['seo_og_image'] || settingsMap['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
+        const url = customMeta?.url || `${baseUrl}${req.originalUrl || '/'}`;
+
+        let html = '';
+        const distHtmlPath = path.join(process.cwd(), 'dist', 'index.html');
+        const srcHtmlPath = path.join(process.cwd(), 'index.html');
+
+        if (process.env.NODE_ENV === 'production' && fs.existsSync(distHtmlPath)) {
+          html = fs.readFileSync(distHtmlPath, 'utf8');
+        } else if (fs.existsSync(srcHtmlPath)) {
+          html = fs.readFileSync(srcHtmlPath, 'utf8');
+        } else {
+          html = `<!doctype html><html><head><title>${title}</title></head><body><div id="root"></div></body></html>`;
+        }
+
+        const metaTags = `
+          <title>${title}</title>
+          <meta name="description" content="${description}" />
+          <meta property="og:title" content="${title}" />
+          <meta property="og:description" content="${description}" />
+          <meta property="og:image" content="${image}" />
+          <meta property="og:url" content="${url}" />
+          <meta property="og:type" content="website" />
+          <meta property="og:site_name" content="${storeName}" />
+          <meta name="twitter:card" content="summary_large_image" />
+          <meta name="twitter:title" content="${title}" />
+          <meta name="twitter:description" content="${description}" />
+          <meta name="twitter:image" content="${image}" />
+        `;
+
+        html = html.replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`);
+        html = html.replace(/<meta\s+(?:property|name)=["'](og:|twitter:)[^>]*?>/gi, '');
+        html = html.replace('</head>', `${metaTags}\n</head>`);
+
+        res.setHeader('Content-Type', 'text/html');
+        res.send(html);
+      } catch (err) {
+        console.error('SEO HTML render error:', err);
+        const srcHtmlPath = path.join(process.cwd(), 'index.html');
+        if (fs.existsSync(srcHtmlPath)) {
+          res.sendFile(srcHtmlPath);
+        } else {
+          res.status(500).send('Internal Server Error');
+        }
+      }
+    }
+
+    app.get('/product/:slug', async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        const slug = req.params.slug;
+        if (db) {
+          const { data: product } = await (db.from('products') as any)
+            .select('*, product_images(*)')
+            .or(`slug.eq.${slug},id.eq.${slug}`)
+            .maybeSingle();
+
+          if (product) {
+            const img = product.image_url || product.imageUrl || (product.product_images?.[0]?.image_url) || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
+            const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
+            return renderHtmlWithSEO(req, res, {
+              title: `${product.name} | SHM Gadget Zone`,
+              description: product.short_description || product.description || `Buy ${product.name} at the best price in Bangladesh.`,
+              image: absoluteImg,
+              url: `${req.protocol}://${req.get('host')}/#/product/${slug}`
+            });
+          }
+        }
+        return renderHtmlWithSEO(req, res);
+      } catch {
+        return renderHtmlWithSEO(req, res);
+      }
+    });
+
+    app.get('/category/:slug', async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        const slug = req.params.slug;
+        if (db) {
+          const { data: cat } = await (db.from('categories') as any)
+            .select('*')
+            .eq('slug', slug)
+            .maybeSingle();
+
+          if (cat) {
+            const img = cat.image_url || cat.imageUrl || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
+            const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
+            return renderHtmlWithSEO(req, res, {
+              title: `${cat.name} Collection | SHM Gadget Zone`,
+              description: cat.description || `Explore ${cat.name} collection at SHM Gadget Zone Bangladesh.`,
+              image: absoluteImg,
+              url: `${req.protocol}://${req.get('host')}/#/category/${slug}`
+            });
+          }
+        }
+        return renderHtmlWithSEO(req, res);
+      } catch {
+        return renderHtmlWithSEO(req, res);
+      }
+    });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -2151,7 +2289,7 @@ async function startServer() {
     const distPath = path.join(process.cwd(), 'dist');
     app.use(express.static(distPath));
     app.get('*', (req, res) => {
-      res.sendFile(path.join(distPath, 'index.html'));
+      renderHtmlWithSEO(req, res);
     });
   }
 

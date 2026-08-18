@@ -235,9 +235,9 @@ export default function HomePage() {
             </Link>
           </div>
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
-            {categories.map((cat) => (
+            {categories.map((cat, index) => (
               <Link
-                key={cat.id}
+                key={cat.id || cat.slug || index}
                 to={`/category/${cat.slug}`}
                 className="bg-white p-5 rounded-2xl shadow-xs border border-slate-200/80 hover:border-slate-400 hover:shadow-md transition text-center cursor-pointer group flex flex-col items-center justify-center"
               >
@@ -286,9 +286,9 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {discountDeals.map((product) => (
+            {discountDeals.map((product, index) => (
               <ProductCard
-                key={product.id}
+                key={product.id || index}
                 product={product}
                 onAddedToCart={(name) => showToast(`Added "${name}" to cart!`)}
               />
@@ -319,9 +319,9 @@ export default function HomePage() {
           </div>
         ) : (
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {featuredProducts.map((product) => (
+            {featuredProducts.map((product, index) => (
               <ProductCard
-                key={product.id}
+                key={product.id || index}
                 product={product}
                 onAddedToCart={(name) => showToast(`Added "${name}" to cart!`)}
               />
@@ -353,9 +353,9 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
-            {newArrivals.map((product) => (
+            {newArrivals.map((product, index) => (
               <ProductCard
-                key={product.id}
+                key={product.id || index}
                 product={product}
                 onAddedToCart={(name) => showToast(`Added "${name}" to cart!`)}
               />
