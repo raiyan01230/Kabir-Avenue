@@ -2054,6 +2054,42 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     }
 
     await logAdminAction(db, admin_email || 'system@admin', 'UPDATE', 'store_settings', 'settings', null, settings, 'Updated store settings');
+
+    // Sync index.html and dist/index.html on disk if google verification is updated
+    try {
+      const gSetting = settings.find((s: any) => s.settingKey === 'seo_google_verification');
+      if (gSetting && gSetting.settingValue) {
+        let gToken = gSetting.settingValue.trim();
+        const m = gToken.match(/content=["']([^"']+)["']/i);
+        if (m) gToken = m[1].trim();
+        gToken = gToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
+
+        const srcHtmlPath = path.join(process.cwd(), 'index.html');
+        if (fs.existsSync(srcHtmlPath)) {
+          let srcHtml = fs.readFileSync(srcHtmlPath, 'utf8');
+          if (srcHtml.includes('name="google-site-verification"')) {
+            srcHtml = srcHtml.replace(/<meta name="google-site-verification"[^>]*>/i, `<meta name="google-site-verification" content="${gToken}" />`);
+          } else {
+            srcHtml = srcHtml.replace('</head>', `  <meta name="google-site-verification" content="${gToken}" />\n  </head>`);
+          }
+          fs.writeFileSync(srcHtmlPath, srcHtml, 'utf8');
+        }
+
+        const distHtmlPath = path.join(process.cwd(), 'dist', 'index.html');
+        if (fs.existsSync(distHtmlPath)) {
+          let distHtml = fs.readFileSync(distHtmlPath, 'utf8');
+          if (distHtml.includes('name="google-site-verification"')) {
+            distHtml = distHtml.replace(/<meta name="google-site-verification"[^>]*>/i, `<meta name="google-site-verification" content="${gToken}" />`);
+          } else {
+            distHtml = distHtml.replace('</head>', `  <meta name="google-site-verification" content="${gToken}" />\n  </head>`);
+          }
+          fs.writeFileSync(distHtmlPath, distHtml, 'utf8');
+        }
+      }
+    } catch (syncErr) {
+      console.warn('Sync index.html warning:', syncErr);
+    }
+
     res.json({ success: true });
   });
 
@@ -3083,6 +3119,16 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       }
     });
 
+    // Google HTML File Verification Support (e.g. /google58x4iKvtWOTVs_O8HgwRU2w4SrtoYwvWCxrs50shOd4.html)
+    app.get(["/google:code.html", "/google*.html"], (req, res) => {
+      const db = getSupabaseAdmin();
+      let defaultToken = '58x4iKvtWOTVs_O8HgwRU2w4SrtoYwvWCxrs50shOd4';
+      const fileCode = req.params.code || req.url.replace(/^\/google/, '').replace(/\.html.*$/, '');
+      const responseCode = fileCode || defaultToken;
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(`google-site-verification: google${responseCode}.html`);
+    });
+
   if (process.env.NODE_ENV !== "production") {
     const vite = await createViteServer({
       server: { middlewareMode: true },
@@ -3108,7 +3154,8 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     });
   } else {
     const distPath = path.join(process.cwd(), 'dist');
-    app.use(express.static(distPath));
+    // Important: index: false prevents express.static from serving raw dist/index.html on GET / so renderHtmlWithSEO runs
+    app.use(express.static(distPath, { index: false }));
     app.get('*', (req, res) => {
       renderHtmlWithSEO(req, res);
     });
