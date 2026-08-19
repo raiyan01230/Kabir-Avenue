@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Settings, Save, ShieldAlert, Globe, Phone, Mail, MapPin, DollarSign, Image, Sparkles } from 'lucide-react';
+import { notifyStoreDataChanged } from '../../lib/queries';
 
 export default function AdminSettings() {
   const [settingsMap, setSettingsMap] = useState<Record<string, string>>({});
@@ -70,6 +71,7 @@ export default function AdminSettings() {
 
       if (res.ok) {
         setSaved(true);
+        notifyStoreDataChanged();
         setTimeout(() => setSaved(false), 4000);
       }
     } catch (err) {

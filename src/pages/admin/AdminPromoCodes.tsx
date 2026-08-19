@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Tag, Plus, Trash2, Edit } from 'lucide-react';
+import { notifyStoreDataChanged } from '../../lib/queries';
 
 export default function AdminPromoCodes() {
   const [promos, setPromos] = useState<any[]>([]);
@@ -40,6 +41,7 @@ export default function AdminPromoCodes() {
       setCode('');
       setDiscountValue('');
       fetchPromos();
+      notifyStoreDataChanged();
     }
   };
 
@@ -47,6 +49,7 @@ export default function AdminPromoCodes() {
     if (!confirm('Delete promo code?')) return;
     await fetch(`/api/admin/promo-codes/${id}`, { method: 'DELETE' });
     fetchPromos();
+    notifyStoreDataChanged();
   };
 
   return (

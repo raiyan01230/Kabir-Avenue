@@ -27,6 +27,7 @@ import {
 } from 'lucide-react';
 import ProductImageUploader, { ProductImageItem } from '../../components/admin/ProductImageUploader';
 import ProductPurchaseHistoryModal from '../../components/admin/ProductPurchaseHistoryModal';
+import { notifyStoreDataChanged } from '../../lib/queries';
 
 export default function AdminProducts() {
   const [products, setProducts] = useState<any[]>([]);
@@ -345,6 +346,7 @@ export default function AdminProducts() {
       });
       if (res.ok) {
         fetchProducts();
+        notifyStoreDataChanged();
       }
     } catch (err) {
       console.error('Failed to toggle product status:', err);
@@ -442,6 +444,7 @@ export default function AdminProducts() {
       if (res.ok) {
         setIsModalOpen(false);
         fetchProducts();
+        notifyStoreDataChanged();
       } else {
         const err = await res.json();
         alert(err.error || 'Failed to save product');
@@ -467,6 +470,7 @@ export default function AdminProducts() {
           alert(data.message || 'Product is referenced by past orders and was archived from catalog.');
         }
         fetchProducts();
+        notifyStoreDataChanged();
       } else {
         alert(data.error || 'Failed to delete product');
       }

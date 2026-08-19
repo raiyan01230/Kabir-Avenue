@@ -1,15 +1,15 @@
 import React, { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { Truck, ShieldCheck, RefreshCw, Mail, Phone, MapPin, Layers } from "lucide-react";
-import { getCategories, Category, getStoreSettings, getDeliveryZones } from "../lib/queries";
+import { getCategories, Category, getStoreSettings, getDeliveryZones, subscribeToStoreUpdates } from "../lib/queries";
 
 export default function Footer() {
   const [categories, setCategories] = useState<Category[]>([]);
   const [settings, setSettings] = useState<Record<string, string>>({});
   const [zones, setZones] = useState<Record<string, number>>({});
 
-  useEffect(() => {
-    async function load() {
+  const loadFooterData = async () => {
+    try {
       const [cats, st, dz] = await Promise.all([
         getCategories(),
         getStoreSettings(),
@@ -18,8 +18,15 @@ export default function Footer() {
       setCategories(cats);
       setSettings(st);
       setZones(dz);
+    } catch {
+      // ignore
     }
-    load();
+  };
+
+  useEffect(() => {
+    loadFooterData();
+    const unsubscribe = subscribeToStoreUpdates(loadFooterData);
+    return () => unsubscribe();
   }, []);
 
   return (

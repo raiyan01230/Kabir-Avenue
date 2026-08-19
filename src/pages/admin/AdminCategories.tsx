@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Plus, Edit, Trash2, Layers, Upload, Loader2, Eye, EyeOff } from 'lucide-react';
+import { notifyStoreDataChanged } from '../../lib/queries';
 
 export default function AdminCategories() {
   const [categories, setCategories] = useState<any[]>([]);
@@ -130,6 +131,7 @@ export default function AdminCategories() {
     if (res.ok) {
       setIsModalOpen(false);
       fetchCats();
+      notifyStoreDataChanged();
     } else {
       const data = await res.json();
       setUploadError(data.error || 'Failed to save category');
@@ -140,6 +142,7 @@ export default function AdminCategories() {
     if (!confirm('Are you sure you want to delete this category?')) return;
     await fetch(`/api/admin/categories/${id}`, { method: 'DELETE' });
     fetchCats();
+    notifyStoreDataChanged();
   };
 
   const toggleStatus = async (cat: any) => {
@@ -150,6 +153,7 @@ export default function AdminCategories() {
       body: JSON.stringify({ is_active: newStatus, admin_email })
     });
     fetchCats();
+    notifyStoreDataChanged();
   };
 
   return (

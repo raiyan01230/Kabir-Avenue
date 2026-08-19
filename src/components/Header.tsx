@@ -4,7 +4,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
 import { useWishlist } from "../context/WishlistContext";
 import { useCart } from "../context/CartContext";
-import { getStoreSettings, getCategories, Category } from "../lib/queries";
+import { getStoreSettings, getCategories, Category, subscribeToStoreUpdates } from "../lib/queries";
 
 export default function Header() {
   const { user, logout } = useAuth();
@@ -12,11 +12,11 @@ export default function Header() {
   const { itemCount: cartItemCount } = useCart();
   const [headerSearch, setHeaderSearch] = useState("");
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [storeName, setStoreName] = useState("STORE BD");
+  const [storeName, setStoreName] = useState("SHM GADGET ZONE");
   const [navCategories, setNavCategories] = useState<Category[]>([]);
   const navigate = useNavigate();
 
-  useEffect(() => {
+  const loadHeaderData = () => {
     getStoreSettings().then(st => {
       if (st['store_name']) {
         setStoreName(st['store_name'].toUpperCase());
@@ -26,6 +26,12 @@ export default function Header() {
     getCategories().then(cats => {
       setNavCategories(cats.slice(0, 5));
     });
+  };
+
+  useEffect(() => {
+    loadHeaderData();
+    const unsubscribe = subscribeToStoreUpdates(loadHeaderData);
+    return () => unsubscribe();
   }, []);
 
   const handleHeaderSearch = (e: React.FormEvent) => {

@@ -1,32 +1,35 @@
 import { motion } from "motion/react";
 import { useEffect, useState } from "react";
-import { getStoreSettings } from "../lib/queries";
+import { getStoreSettings, subscribeToStoreUpdates } from "../lib/queries";
 
 export default function InfiniteMarquee() {
   const [content, setContent] = useState<string[]>([
-    "Free Shipping",
-    "Secure Payment",
-    "Easy Returns",
-    "Cash on Delivery",
-    "Fast Delivery",
+    "Free Express Delivery on Orders Over ৳5000",
+    "100% Genuine Guaranteed Official Warranty",
+    "Cash on Delivery Available Across Bangladesh",
+    "Inside Dhaka ৳70 | Outside Dhaka ৳130",
+    "Fast 24-48h Home Delivery",
   ]);
 
-  useEffect(() => {
-    async function fetchMarquee() {
-      const settings = await getStoreSettings();
-      if (settings['marquee_text']) {
-        // Split by bullet points, pipes, or commas if Admin enters it as a string
-        const parsed = settings['marquee_text']
-          .split(/•|\|/)
-          .map(s => s.trim())
-          .filter(Boolean);
-          
-        if (parsed.length > 0) {
-          setContent(parsed);
-        }
+  const fetchMarquee = async () => {
+    const settings = await getStoreSettings();
+    if (settings['marquee_text']) {
+      // Split by bullet points, pipes, or commas if Admin enters it as a string
+      const parsed = settings['marquee_text']
+        .split(/•|\|/)
+        .map(s => s.trim())
+        .filter(Boolean);
+        
+      if (parsed.length > 0) {
+        setContent(parsed);
       }
     }
+  };
+
+  useEffect(() => {
     fetchMarquee();
+    const unsubscribe = subscribeToStoreUpdates(fetchMarquee);
+    return () => unsubscribe();
   }, []);
 
   return (

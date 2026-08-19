@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useRef } from 'react';
 import { Image as ImageIcon, Plus, Trash2, Upload, Loader2, Edit2, Eye, EyeOff, CheckCircle2, Crop, Sparkles, ArrowRight, ZoomIn, ZoomOut, Move, RotateCcw, Check } from 'lucide-react';
+import { notifyStoreDataChanged } from '../../lib/queries';
 
 interface BannerItem {
   id: string;
@@ -308,6 +309,7 @@ export default function AdminBanners() {
     if (res.ok) {
       setIsModalOpen(false);
       fetchBanners();
+      notifyStoreDataChanged();
     } else {
       const data = await res.json();
       setUploadError(data.error || 'Failed to save banner');
@@ -318,6 +320,7 @@ export default function AdminBanners() {
     if (!confirm('Are you sure you want to delete this banner?')) return;
     await fetch(`/api/admin/banners/${id}`, { method: 'DELETE' });
     fetchBanners();
+    notifyStoreDataChanged();
   };
 
   const toggleStatus = async (banner: BannerItem) => {
@@ -328,6 +331,7 @@ export default function AdminBanners() {
       body: JSON.stringify({ is_active: newStatus, admin_email })
     });
     fetchBanners();
+    notifyStoreDataChanged();
   };
 
   return (

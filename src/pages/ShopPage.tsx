@@ -16,7 +16,7 @@ import {
   Package,
   Layers
 } from 'lucide-react';
-import { getFilteredCatalog, getCategories, Product, Category } from '../lib/queries';
+import { getFilteredCatalog, getCategories, Product, Category, subscribeToStoreUpdates } from '../lib/queries';
 import { useWishlist } from '../context/WishlistContext';
 import { useAuth } from '../context/AuthContext';
 import { useCart } from '../context/CartContext';
@@ -94,29 +94,34 @@ export default function ShopPage() {
       setCategories(cats);
     }
     loadCategories();
+    const unsubscribe = subscribeToStoreUpdates(loadCategories);
+    return () => unsubscribe();
   }, []);
 
   // Fetch products whenever filters change
-  useEffect(() => {
-    async function loadProducts() {
-      setLoading(true);
-      try {
-        const items = await getFilteredCatalog({
-          search: searchTerm,
-          categorySlug: selectedCategory,
-          minPrice: minPrice > 0 ? minPrice : undefined,
-          maxPrice: maxPrice > 0 ? maxPrice : undefined,
-          inStockOnly,
-          sortBy,
-        });
-        setProducts(items);
-      } catch (err) {
-        console.error('Error fetching catalog:', err);
-      } finally {
-        setLoading(false);
-      }
+  const loadProducts = async () => {
+    setLoading(true);
+    try {
+      const items = await getFilteredCatalog({
+        search: searchTerm,
+        categorySlug: selectedCategory,
+        minPrice: minPrice > 0 ? minPrice : undefined,
+        maxPrice: maxPrice > 0 ? maxPrice : undefined,
+        inStockOnly,
+        sortBy,
+      });
+      setProducts(items);
+    } catch (err) {
+      console.error('Error fetching catalog:', err);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadProducts();
+    const unsubscribe = subscribeToStoreUpdates(loadProducts);
+    return () => unsubscribe();
   }, [searchTerm, selectedCategory, minPrice, maxPrice, inStockOnly, sortBy]);
 
   // Sync state to URL params

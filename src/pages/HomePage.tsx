@@ -30,6 +30,7 @@ import {
   getDeliveryZones,
   getStoreReviews,
   submitProductReview,
+  subscribeToStoreUpdates,
   Product, 
   Category, 
   Banner,
@@ -66,33 +67,36 @@ export default function HomePage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  useEffect(() => {
-    async function fetchData() {
-      try {
-        setLoading(true);
-        const [bannerList, featured, deals, arrivals, cats, dz, revs] = await Promise.all([
-          getHomepageBanners(),
-          getFeaturedProducts(),
-          getDiscountDeals(),
-          getNewArrivals(),
-          getCategories(),
-          getDeliveryZones(),
-          getStoreReviews()
-        ]);
-        setBanners(bannerList);
-        setFeaturedProducts(featured);
-        setDiscountDeals(deals);
-        setNewArrivals(arrivals);
-        setCategories(cats);
-        setZones(dz);
-        setReviews(revs || []);
-      } catch (err: any) {
-        setError(err.message || 'Failed to load homepage data');
-      } finally {
-        setLoading(false);
-      }
+  const fetchData = async (showLoadingSpinner = true) => {
+    try {
+      if (showLoadingSpinner) setLoading(true);
+      const [bannerList, featured, deals, arrivals, cats, dz, revs] = await Promise.all([
+        getHomepageBanners(),
+        getFeaturedProducts(),
+        getDiscountDeals(),
+        getNewArrivals(),
+        getCategories(),
+        getDeliveryZones(),
+        getStoreReviews()
+      ]);
+      setBanners(bannerList);
+      setFeaturedProducts(featured);
+      setDiscountDeals(deals);
+      setNewArrivals(arrivals);
+      setCategories(cats);
+      setZones(dz);
+      setReviews(revs || []);
+    } catch (err: any) {
+      setError(err.message || 'Failed to load homepage data');
+    } finally {
+      if (showLoadingSpinner) setLoading(false);
     }
-    fetchData();
+  };
+
+  useEffect(() => {
+    fetchData(true);
+    const unsubscribe = subscribeToStoreUpdates(() => fetchData(false));
+    return () => unsubscribe();
   }, []);
 
   const handleReviewSubmit = async (e: React.FormEvent) => {

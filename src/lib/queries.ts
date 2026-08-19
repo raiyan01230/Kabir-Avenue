@@ -132,13 +132,43 @@ const FALLBACK_PRODUCTS: Product[] = [
   }
 ];
 
+export function notifyStoreDataChanged() {
+  if (typeof window !== 'undefined') {
+    try {
+      localStorage.setItem('store_last_updated', Date.now().toString());
+      window.dispatchEvent(new CustomEvent('store_data_updated'));
+    } catch {
+      // ignore
+    }
+  }
+}
+
+export function subscribeToStoreUpdates(callback: () => void): () => void {
+  if (typeof window === 'undefined') return () => {};
+  
+  const handleUpdate = () => {
+    callback();
+  };
+
+  window.addEventListener('store_data_updated', handleUpdate);
+  window.addEventListener('storage', (e) => {
+    if (e.key === 'store_last_updated') {
+      callback();
+    }
+  });
+
+  return () => {
+    window.removeEventListener('store_data_updated', handleUpdate);
+  };
+}
+
 async function fetchAllProducts(): Promise<any[]> {
   try {
     const res = await fetch('/api/store/products', { cache: 'no-store' });
     const contentType = res.headers.get('content-type');
     if (res.ok && contentType && contentType.includes('application/json')) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data;
     }
   } catch (err) {
     // ignore
@@ -148,7 +178,7 @@ async function fetchAllProducts(): Promise<any[]> {
     const { data, error } = await supabase
       .from('products')
       .select('*, categories(*), product_images(*)');
-    if (!error && data && data.length > 0) {
+    if (!error && data && Array.isArray(data)) {
       return data;
     }
   } catch (err) {
@@ -164,7 +194,7 @@ async function fetchAllCategories(): Promise<any[]> {
     const contentType = res.headers.get('content-type');
     if (res.ok && contentType && contentType.includes('application/json')) {
       const data = await res.json();
-      if (Array.isArray(data) && data.length > 0) return data;
+      if (Array.isArray(data)) return data;
     }
   } catch (err) {
     // ignore
@@ -174,7 +204,7 @@ async function fetchAllCategories(): Promise<any[]> {
     const { data, error } = await supabase
       .from('categories')
       .select('*');
-    if (!error && data && data.length > 0) {
+    if (!error && data && Array.isArray(data)) {
       return data;
     }
   } catch (err) {
@@ -198,7 +228,7 @@ export async function getStoreSettings(): Promise<Record<string, string>> {
   try {
     const res = await fetch('/api/store/settings-map', { cache: 'no-store' });
     const map = await res.json();
-    if (map && Object.keys(map).length > 0) {
+    if (map && typeof map === 'object' && Object.keys(map).length > 0) {
       // Normalize keys
       const normalized: Record<string, string> = {};
       Object.keys(map).forEach(k => {
@@ -225,13 +255,13 @@ export async function getStoreSettings(): Promise<Record<string, string>> {
   }
   
   return {
-    'store_name': 'STORE BD',
-    'contact_address': 'Gulshan-2, Dhaka-1212, Bangladesh',
+    'store_name': 'SHM GADGET ZONE',
+    'contact_address': 'Level 4, Tech Plaza, Agargaon, Dhaka-1207, Bangladesh',
     'contact_phone': '+880 1700-000000',
-    'contact_email': 'support@store.com.bd',
-    'business_hours': '9 AM - 9 PM',
-    'marquee_text': 'Free Shipping on Select Orders • 100% Genuine Products • Cash on Delivery • Easy Returns Nationwide',
-    'store_description': "Bangladesh's trusted destination for quality lifestyle products, fashion, electronics, home essentials, and more.",
+    'contact_email': 'support@shmgadgetzone.com',
+    'business_hours': '10 AM - 8 PM',
+    'marquee_text': 'Free Express Delivery on Orders Over ৳5000 • 100% Genuine Guaranteed Official Warranty • Cash on Delivery Available Across Bangladesh • Inside Dhaka ৳70 | Outside Dhaka ৳130',
+    'store_description': "Bangladesh's premier destination for genuine enthusiast hardware, high-refresh displays, and ergonomic mechanical peripherals.",
     'copyright_year': new Date().getFullYear().toString(),
   };
 }
