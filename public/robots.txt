@@ -109,4 +109,3 @@ Sitemap: https://shmgadgetzone.onrender.com/sitemap-products.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-categories.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-images.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-pages.xml
-
