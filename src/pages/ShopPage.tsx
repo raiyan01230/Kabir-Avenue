@@ -51,10 +51,19 @@ export default function ShopPage() {
   const { addToCart, setBuyNow } = useCart();
   const { user } = useAuth();
 
+  const currentCategoryObj = categories.find(c => c.slug === selectedCategory || c.id === selectedCategory);
+  const dynamicTitle = currentCategoryObj 
+    ? `${currentCategoryObj.name} Price in Bangladesh` 
+    : (selectedCategory !== 'all' ? `${selectedCategory.toUpperCase()} Collection` : 'Shop All Genuine Gadgets & Electronics');
+  const dynamicDesc = currentCategoryObj?.description 
+    ? currentCategoryObj.description 
+    : 'Explore our catalog of genuine smart gadgets, mobile accessories, audio gear, and lifestyle electronics in Bangladesh with official warranty.';
+
   // Apply SEO and Google Structured Data (ItemList)
   useSEO({
-    title: selectedCategory !== 'all' ? `Category: ${selectedCategory}` : 'Shop All Products & Hardware',
-    description: 'Explore our catalog of genuine enthusiast PC hardware, mechanical keyboards, graphics cards, and gaming accessories in Bangladesh.',
+    title: dynamicTitle,
+    description: dynamicDesc,
+    ogImage: currentCategoryObj?.image_url || undefined,
     canonicalUrl: window.location.href,
   });
 
@@ -63,7 +72,7 @@ export default function ShopPage() {
       injectStructuredData({
         '@context': 'https://schema.org',
         '@type': 'ItemList',
-        itemListElement: products.map((p, idx) => ({
+        itemListElement: products.slice(0, 24).map((p, idx) => ({
           '@type': 'ListItem',
           position: idx + 1,
           url: `${window.location.origin}/products/${p.slug || p.id}`,
@@ -176,8 +185,6 @@ export default function ShopPage() {
     setBuyNow(product, 1);
     navigate('/checkout?buyNow=1');
   };
-
-  const currentCategoryObj = categories.find((c) => c.slug === selectedCategory);
 
   return (
     <div className="min-h-screen bg-slate-50/50 pb-20">

@@ -89,47 +89,80 @@ export default function ProductDetailsPage() {
           setGalleryImages(images);
           setSelectedImgIdx(0);
 
-          // Apply product specific SEO
+          // Fetch reviews using API
+          let reviewsData: any[] = [];
+          try {
+            reviewsData = await getProductReviews(prodData.id);
+            setReviews(reviewsData || []);
+          } catch {
+            setReviews([]);
+          }
+
+          // Fetch store settings for brand and seller
+          let currentStoreName = 'SHM GADGET ZONE';
+          let storeSettingsMap: Record<string, string> = {};
+          try {
+            const sRes = await fetch('/api/store/settings-map', { cache: 'no-store' });
+            if (sRes.ok) {
+              storeSettingsMap = await sRes.json();
+              if (storeSettingsMap.store_name) currentStoreName = storeSettingsMap.store_name;
+            }
+          } catch (e) {
+            console.warn('Store settings fetch failed in product page:', e);
+          }
+
+          // Dynamic SEO metadata
+          const seoTitle = prodData.seo_title || `${prodData.name} | ${currentStoreName}`;
+          const cleanDesc = prodData.seo_description || prodData.short_description || prodData.description?.replace(/<[^>]*>?/gm, '') || `Buy authentic ${prodData.name} from ${currentStoreName} with warranty and fast delivery across Bangladesh.`;
+
           applySEOMetadata({
-            title: prodData.name,
-            description: prodData.short_description || prodData.description || `Buy ${prodData.name} at the best price in Bangladesh with fast nationwide delivery.`,
+            title: seoTitle,
+            description: cleanDesc.slice(0, 160),
             ogImage: images[0],
             ogType: 'product',
             canonicalUrl: window.location.href,
-          });
+          }, storeSettingsMap);
 
-          // Inject Schema.org Product structured data
-          injectStructuredData({
+          // Build Schema.org Product structured data with REAL data only
+          const schemaObj: any = {
             '@context': 'https://schema.org/',
             '@type': 'Product',
             name: prodData.name,
             image: images,
-            description: prodData.short_description || prodData.description || '',
-            sku: prodData.sku || prodData.id,
+            description: cleanDesc.slice(0, 300),
+            sku: prodData.sku || String(prodData.id),
             brand: {
               '@type': 'Brand',
-              name: 'HYPERDRIVE'
+              name: prodData.categories?.name || currentStoreName
             },
             offers: {
               '@type': 'Offer',
               url: window.location.href,
               priceCurrency: 'BDT',
-              price: prodData.price,
+              price: String(prodData.price || '0'),
               availability: (prodData.stock_quantity ?? 10) > 0 ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+              itemCondition: 'https://schema.org/NewCondition',
               seller: {
                 '@type': 'Organization',
-                name: 'HYPERDRIVE BD'
+                name: currentStoreName
               }
             }
-          });
+          };
 
-          // Fetch reviews using API
-          try {
-            const reviewsData = await getProductReviews(prodData.id);
-            setReviews(reviewsData || []);
-          } catch {
-            setReviews([]);
+          // If authentic customer reviews exist, attach valid AggregateRating
+          if (reviewsData && reviewsData.length > 0) {
+            const totalRating = reviewsData.reduce((acc: number, r: any) => acc + (Number(r.rating) || 5), 0);
+            const avgRating = (totalRating / reviewsData.length).toFixed(1);
+            schemaObj.aggregateRating = {
+              '@type': 'AggregateRating',
+              ratingValue: avgRating,
+              reviewCount: String(reviewsData.length),
+              bestRating: '5',
+              worstRating: '1'
+            };
           }
+
+          injectStructuredData(schemaObj, 'product-schema-jsonld');
 
           // Fetch related products in the same category
           try {

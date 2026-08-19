@@ -794,6 +794,7 @@ export default function AdminProducts() {
                       images={productImages}
                       onChange={setProductImages}
                       folder="products"
+                      productName={name}
                       onImageUploaded={handleImageUploadedCallback}
                     />
                   </div>

@@ -35,8 +35,10 @@ import {
   Banner,
   ReviewItem
 } from '../lib/queries';
+import { useSEO } from '../hooks/useSEO';
 
 export default function HomePage() {
+  useSEO();
   const [banners, setBanners] = useState<Banner[]>([]);
   const [featuredProducts, setFeaturedProducts] = useState<Product[]>([]);
   const [discountDeals, setDiscountDeals] = useState<Product[]>([]);

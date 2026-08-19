@@ -4,7 +4,7 @@ import { useLocation } from 'react-router-dom';
 export interface SEOProps {
   title?: string;
   description?: string;
-  keywords?: string;
+  keywords?: string | string[];
   ogImage?: string;
   ogType?: string;
   ogUrl?: string;
@@ -33,32 +33,56 @@ export function setMetaTag(attribute: 'name' | 'property', attrValue: string, co
 /**
  * SSR-safe helper to set or update a link tag (e.g., canonical, icon)
  */
-export function setLinkTag(rel: string, href: string | undefined | null) {
+export function setLinkTag(rel: string, href: string | undefined | null, attributes?: Record<string, string>) {
   if (typeof document === 'undefined') return;
   if (!href) return;
 
-  let element = document.querySelector(`link[rel="${rel}"]`);
+  let selector = `link[rel="${rel}"]`;
+  if (attributes?.hreflang) {
+    selector += `[hreflang="${attributes.hreflang}"]`;
+  }
+
+  let element = document.querySelector(selector);
   if (!element) {
     element = document.createElement('link');
     element.setAttribute('rel', rel);
+    if (attributes) {
+      Object.entries(attributes).forEach(([k, v]) => element?.setAttribute(k, v));
+    }
     document.head.appendChild(element);
   }
   element.setAttribute('href', href);
 }
 
 /**
- * Applies full SEO metadata to the DOM in an SSR-safe manner
+ * Injects or updates a JSON-LD structured data script element safely
+ */
+export function injectStructuredData(schema: object | object[], scriptId: string = 'structured-data-jsonld') {
+  if (typeof document === 'undefined') return;
+  let script = document.getElementById(scriptId) as HTMLScriptElement | null;
+  if (!script) {
+    script = document.createElement('script');
+    script.id = scriptId;
+    script.type = 'application/ld+json';
+    document.head.appendChild(script);
+  }
+  script.textContent = JSON.stringify(schema, null, 2);
+}
+
+/**
+ * Applies full SEO metadata to the DOM dynamically based on database store settings
  */
 export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, string>) {
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
 
-  const storeName = globalSettings?.['store_name'] || 'HYPERDRIVE';
-  const defaultTitle = globalSettings?.['seo_title'] || `${storeName} | Authentic Enthusiast Hardware Bangladesh`;
-  const defaultDesc = globalSettings?.['seo_description'] || `Shop genuine enthusiast electronics, premium PC hardware, and gaming peripherals in Bangladesh at ${storeName}. Nationwide express delivery.`;
-  const defaultKeywords = globalSettings?.['seo_keywords'] || 'ecommerce, bangladesh, hardware, pc components, graphics cards, mechanical keyboards, dhaka tech';
-  const defaultOgImage = globalSettings?.['seo_og_image'] || globalSettings?.['og_image'] || globalSettings?.['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
-  const twitterHandle = globalSettings?.['seo_twitter_handle'] || '@hyperdrive_bd';
+  const storeName = globalSettings?.['store_name'] || 'Online Store BD';
+  const defaultTitle = globalSettings?.['seo_title'] || `${storeName} | Best Online Gadget Store in Bangladesh`;
+  const defaultDesc = globalSettings?.['seo_description'] || `Shop genuine electronics, gadgets, and tech accessories in Bangladesh at ${storeName}. Nationwide express delivery and official warranty.`;
+  const defaultKeywords = globalSettings?.['seo_keywords'] || 'ecommerce bangladesh, gadget store, online shopping bd, genuine tech';
+  const defaultOgImage = globalSettings?.['seo_og_image'] || globalSettings?.['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
+  const twitterHandle = globalSettings?.['seo_twitter_handle'] || '@gadgetzone_bd';
   const siteUrl = globalSettings?.['seo_site_url'] || window.location.origin;
+  const canonicalBase = globalSettings?.['seo_canonical_base'] || siteUrl;
 
   // Infer title from path if seo.title is not explicitly provided
   let inferredTitle = seo?.title;
@@ -70,39 +94,45 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
     }
     
     if (path === '/' || path === '' || path === '/index.html') {
-      inferredTitle = 'Home';
+      inferredTitle = defaultTitle;
     } else if (path.includes('/shop') || path.includes('/products')) {
-      inferredTitle = 'Shop All Products';
+      inferredTitle = `Shop All Products | ${storeName}`;
     } else if (path.includes('/category')) {
-      inferredTitle = 'Category Collection';
+      inferredTitle = `Category Collection | ${storeName}`;
     } else if (path.includes('/cart')) {
-      inferredTitle = 'Shopping Cart';
+      inferredTitle = `Shopping Cart | ${storeName}`;
     } else if (path.includes('/checkout')) {
-      inferredTitle = 'Secure Checkout';
+      inferredTitle = `Secure Checkout | ${storeName}`;
     } else if (path.includes('/orders') || path.includes('/order-success')) {
-      inferredTitle = 'My Order History';
+      inferredTitle = `My Order History | ${storeName}`;
     } else if (path.includes('/track')) {
-      inferredTitle = 'Track Order';
+      inferredTitle = `Track Order | ${storeName}`;
     } else if (path.includes('/wishlist')) {
-      inferredTitle = 'My Wishlist';
+      inferredTitle = `My Wishlist | ${storeName}`;
     } else if (path.includes('/account')) {
-      inferredTitle = 'Customer Account';
+      inferredTitle = `Customer Account | ${storeName}`;
     } else if (path.includes('/login')) {
-      inferredTitle = 'Customer Login';
+      inferredTitle = `Customer Login | ${storeName}`;
     } else if (path.includes('/admin')) {
-      inferredTitle = 'Admin Management Dashboard';
+      inferredTitle = `Admin Management Dashboard | ${storeName}`;
     } else {
-      inferredTitle = 'Storefront';
+      inferredTitle = `${storeName} Storefront`;
+    }
+  } else {
+    // If title does not already include storeName, append it nicely
+    if (!inferredTitle.includes(storeName) && !inferredTitle.includes('|') && !inferredTitle.includes('-')) {
+      inferredTitle = `${inferredTitle} | ${storeName}`;
     }
   }
 
-  const finalTitle = inferredTitle ? `${inferredTitle} | ${storeName}` : defaultTitle;
+  const finalTitle = inferredTitle;
   const finalDesc = seo.description || defaultDesc;
-  const finalKeywords = seo.keywords || defaultKeywords;
+  const rawKeywords = seo.keywords || defaultKeywords;
+  const finalKeywords = Array.isArray(rawKeywords) ? rawKeywords.join(', ') : rawKeywords;
   const finalOgImage = seo.ogImage || defaultOgImage;
   const finalOgUrl = seo.ogUrl || window.location.href;
   const finalOgType = seo.ogType || 'website';
-  const finalTwitterCard = seo.twitterCard || 'summary_large_image';
+  const finalTwitterCard = seo.twitterCard || globalSettings?.['seo_twitter_card'] || 'summary_large_image';
 
   // 1. Title
   document.title = finalTitle;
@@ -111,7 +141,12 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setMetaTag('name', 'description', finalDesc);
   setMetaTag('name', 'keywords', finalKeywords);
   setMetaTag('name', 'author', storeName);
-  setMetaTag('name', 'robots', seo.noIndex ? 'noindex, nofollow' : 'index, follow');
+  
+  const robotsDirective = seo.noIndex 
+    ? 'noindex, nofollow' 
+    : (globalSettings?.['seo_robots_directive'] || 'index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1');
+  setMetaTag('name', 'robots', robotsDirective);
+  setMetaTag('name', 'googlebot', robotsDirective);
 
   // 3. Open Graph (OG) Meta
   setMetaTag('property', 'og:title', finalTitle);
@@ -129,11 +164,24 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setMetaTag('name', 'twitter:site', twitterHandle);
   setMetaTag('name', 'twitter:creator', twitterHandle);
 
-  // 5. Canonical Link & Hreflang
-  setLinkTag('canonical', seo.canonicalUrl || finalOgUrl);
-  setLinkTag('alternate', seo.canonicalUrl || finalOgUrl);
+  // 5. Canonical Link
+  const computedCanonical = seo.canonicalUrl || `${canonicalBase.replace(/\/+$/, '')}${window.location.pathname}${window.location.search}`;
+  setLinkTag('canonical', computedCanonical);
 
-  // 6. Bangladesh Local SEO Meta
+  // 6. Favicon
+  if (globalSettings?.['store_favicon']) {
+    setLinkTag('icon', globalSettings['store_favicon']);
+  }
+
+  // 7. Webmaster Verification Tokens
+  if (globalSettings?.['seo_google_verification']) {
+    setMetaTag('name', 'google-site-verification', globalSettings['seo_google_verification']);
+  }
+  if (globalSettings?.['seo_bing_verification']) {
+    setMetaTag('name', 'msvalidate.01', globalSettings['seo_bing_verification']);
+  }
+
+  // 8. Bangladesh Local SEO Geolocation Meta
   const geoRegion = globalSettings?.['seo_geo_region'] || 'BD-13';
   const geoPlacename = globalSettings?.['seo_geo_placename'] || 'Dhaka, Bangladesh';
   const geoPosition = globalSettings?.['seo_geo_position'] || '23.8103;90.4125';
@@ -141,61 +189,10 @@ export function applySEOMetadata(seo: SEOProps, globalSettings?: Record<string, 
   setMetaTag('name', 'geo.placename', geoPlacename);
   setMetaTag('name', 'geo.position', geoPosition);
   setMetaTag('name', 'ICBM', geoPosition.replace(';', ', '));
-
-  // 7. Search Console Verification if set
-  if (globalSettings?.['seo_google_verification']) {
-    let gToken = globalSettings['seo_google_verification'].trim();
-    const gMatch = gToken.match(/content=["']([^"']+)["']/i);
-    if (gMatch) gToken = gMatch[1];
-    gToken = gToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
-    if (gToken) setMetaTag('name', 'google-site-verification', gToken);
-  }
-  if (globalSettings?.['seo_bing_verification']) {
-    let bToken = globalSettings['seo_bing_verification'].trim();
-    const bMatch = bToken.match(/content=["']([^"']+)["']/i);
-    if (bMatch) bToken = bMatch[1];
-    bToken = bToken.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
-    if (bToken) setMetaTag('name', 'msvalidate.01', bToken);
-  }
-
-  // 8. Favicon if configured in settings
-  const faviconUrl = globalSettings?.['store_favicon'] || globalSettings?.['favicon_url'] || globalSettings?.['favicon'];
-  if (faviconUrl) {
-    setLinkTag('icon', faviconUrl);
-    setLinkTag('shortcut icon', faviconUrl);
-    setLinkTag('apple-touch-icon', faviconUrl);
-
-    if (typeof document !== 'undefined') {
-      const existingIcons = document.querySelectorAll("link[rel*='icon'], link[rel='shortcut icon'], link[rel='apple-touch-icon']");
-      if (existingIcons.length > 0) {
-        existingIcons.forEach(el => el.setAttribute('href', faviconUrl));
-      } else {
-        const link = document.createElement('link');
-        link.rel = 'icon';
-        link.href = faviconUrl;
-        document.head.appendChild(link);
-      }
-    }
-  }
 }
 
 /**
- * Inject Schema.org JSON-LD structured data for Google search ranking & rich snippets
- */
-export function injectStructuredData(schemaObj: object) {
-  if (typeof document === 'undefined') return;
-  let scriptEl = document.querySelector('script#structured-data');
-  if (!scriptEl) {
-    scriptEl = document.createElement('script');
-    scriptEl.id = 'structured-data';
-    scriptEl.setAttribute('type', 'application/ld+json');
-    document.head.appendChild(scriptEl);
-  }
-  scriptEl.textContent = JSON.stringify(schemaObj);
-}
-
-/**
- * Custom React hook for dynamic database-backed SEO
+ * Main React Hook for Dynamic SEO Management
  */
 export function useSEO(customSEO?: SEOProps) {
   const [settings, setSettings] = useState<Record<string, string>>({});
@@ -203,19 +200,18 @@ export function useSEO(customSEO?: SEOProps) {
 
   useEffect(() => {
     let isMounted = true;
-
     fetch('/api/store/settings-map', { cache: 'no-store' })
       .then(res => res.json())
-      .then(data => {
-        if (!isMounted) return;
-        if (data && typeof data === 'object') {
-          setSettings(data);
-          applySEOMetadata(customSEO || {}, data);
+      .then(map => {
+        if (isMounted && map) {
+          setSettings(map);
+          applySEOMetadata(customSEO || {}, map);
         }
       })
       .catch(() => {
-        if (!isMounted) return;
-        applySEOMetadata(customSEO || {}, {});
+        if (isMounted) {
+          applySEOMetadata(customSEO || {});
+        }
       });
 
     return () => {

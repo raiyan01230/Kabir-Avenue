@@ -3,6 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { CheckCircle2, Clock, Truck, Package, ArrowLeft, ShieldCheck, MapPin, Phone, Search, ChevronRight, AlertCircle, ShoppingBag, Copy, Check, ExternalLink } from 'lucide-react';
 import { resolveOrderItemImage, resolveOrderItemName, resolveOrderItemSku } from '../lib/orderItemHelper';
+import { useSEO } from '../hooks/useSEO';
 
 interface OrderDetails {
   id: string;
@@ -45,6 +46,10 @@ const TIMELINE_STEPS = [
 
 export default function TrackOrderPage() {
   const { orderNumber: paramOrderNumber } = useParams<{ orderNumber: string }>();
+  useSEO({
+    title: paramOrderNumber ? `Track Order #${paramOrderNumber}` : 'Track Your Order Status',
+    description: 'Track your real-time order delivery progress with your tracking code or order phone number.',
+  });
   const [searchInput, setSearchInput] = useState(paramOrderNumber || '');
   const [activeOrderNumber, setActiveOrderNumber] = useState(paramOrderNumber || '');
   const [order, setOrder] = useState<OrderDetails | null>(null);

@@ -1,11 +1,28 @@
 import React, { useState, useRef } from 'react';
-import { Upload, X, Star, ArrowLeft, ArrowRight, Image as ImageIcon, CheckCircle, AlertCircle, Loader2, Plus, ExternalLink } from 'lucide-react';
+import { 
+  Upload, 
+  X, 
+  Star, 
+  ArrowLeft, 
+  ArrowRight, 
+  Image as ImageIcon, 
+  CheckCircle, 
+  AlertCircle, 
+  Loader2, 
+  Plus, 
+  ExternalLink,
+  Sparkles,
+  Tag,
+  Settings2,
+  FileText
+} from 'lucide-react';
 
 export interface ProductImageItem {
   id?: string;
   image_url: string;
   storage_path?: string;
   alt_text?: string;
+  image_title?: string;
   sort_order: number;
   is_primary: boolean;
   uploading?: boolean;
@@ -16,6 +33,8 @@ interface ProductImageUploaderProps {
   images: ProductImageItem[];
   onChange: (images: ProductImageItem[]) => void;
   folder?: string;
+  productName?: string;
+  categoryName?: string;
   onImageUploaded?: (item: ProductImageItem, base64?: string) => void;
 }
 
@@ -23,13 +42,28 @@ export default function ProductImageUploader({
   images,
   onChange,
   folder = 'products',
+  productName = '',
+  categoryName = '',
   onImageUploaded
 }: ProductImageUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
   const [manualUrl, setManualUrl] = useState('');
   const [showManualInput, setShowManualInput] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
+  const [autoGenerateSeo, setAutoGenerateSeo] = useState(true);
+  const [editingDetailsIdx, setEditingDetailsIdx] = useState<number | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Helper to compute automatic SEO alt text
+  const generateDynamicAlt = (idx: number, isPrimary: boolean): string => {
+    const baseName = productName?.trim() || 'Product';
+    if (isPrimary) {
+      return `${baseName} - Front View`;
+    }
+    const angles = ['Side Angle', 'Display & Ports', 'Back View', 'Accessories & Packaging', 'Feature Detail', 'Lifestyle View'];
+    const angleName = angles[idx - 1] || `Angle ${idx + 1}`;
+    return `${baseName} - ${angleName}`;
+  };
 
   const handleFiles = async (files: FileList | null) => {
     if (!files || files.length === 0) return;
@@ -55,11 +89,18 @@ export default function ProductImageUploader({
     const newItems: ProductImageItem[] = validFiles.map((file, idx) => {
       const tempPreview = URL.createObjectURL(file);
       const isFirst = images.length === 0 && idx === 0;
+      const targetIndex = images.length + idx;
+      
+      const computedAlt = autoGenerateSeo 
+        ? generateDynamicAlt(targetIndex, isFirst)
+        : file.name.replace(/\.[^/.]+$/, '');
+
       return {
         image_url: tempPreview,
         storage_path: '',
-        alt_text: file.name.replace(/\.[^/.]+$/, ''),
-        sort_order: images.length + idx,
+        alt_text: computedAlt,
+        image_title: computedAlt,
+        sort_order: targetIndex,
         is_primary: isFirst,
         uploading: true
       };
@@ -68,10 +109,16 @@ export default function ProductImageUploader({
     const combined = [...images, ...newItems];
     onChange(combined);
 
-    // Upload each file to Supabase Storage
+    // Upload each file to Supabase Storage with sanitized SEO filename
     for (let i = 0; i < validFiles.length; i++) {
       const file = validFiles[i];
       const targetIndex = images.length + i;
+      const cleanSlug = (productName || 'product')
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, '-')
+        .replace(/(^-|-$)/g, '');
+      const ext = file.name.split('.').pop() || 'jpg';
+      const sanitizedFileName = `${cleanSlug}-photo-${targetIndex + 1}-${Date.now()}.${ext}`;
 
       try {
         const base64 = await fileToBase64(file);
@@ -80,7 +127,7 @@ export default function ProductImageUploader({
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             fileBase64: base64,
-            fileName: file.name,
+            fileName: sanitizedFileName,
             mimeType: file.type,
             folder
           })
@@ -88,8 +135,7 @@ export default function ProductImageUploader({
 
         const data = await res.json();
         if (res.ok && data.publicUrl) {
-          // Update item with permanent Supabase storage URL
-          const updatedItem = {
+          const updatedItem: ProductImageItem = {
             ...combined[targetIndex],
             image_url: data.publicUrl,
             storage_path: data.storagePath,
@@ -180,19 +226,16 @@ export default function ProductImageUploader({
     const itemToRemove = images[index];
     const updated = images.filter((_, idx) => idx !== index);
 
-    // If we removed the primary image, make the first one primary
     if (itemToRemove.is_primary && updated.length > 0) {
       updated[0].is_primary = true;
     }
 
-    // Recalculate sort_order
     const reordered = updated.map((img, idx) => ({
       ...img,
       sort_order: idx
     }));
     onChange(reordered);
 
-    // If it has a storage_path, optionally clean up from Supabase Storage
     if (itemToRemove.storage_path && !itemToRemove.storage_path.startsWith('http')) {
       try {
         await fetch('/api/admin/storage/delete', {
@@ -209,10 +252,15 @@ export default function ProductImageUploader({
   const handleAddManualUrl = () => {
     if (!manualUrl.trim()) return;
     const isFirst = images.length === 0;
+    const computedAlt = autoGenerateSeo 
+      ? generateDynamicAlt(images.length, isFirst)
+      : 'Product Image';
+
     const newItem: ProductImageItem = {
       image_url: manualUrl.trim(),
       storage_path: manualUrl.trim(),
-      alt_text: 'Product Image',
+      alt_text: computedAlt,
+      image_title: computedAlt,
       sort_order: images.length,
       is_primary: isFirst,
       uploading: false
@@ -228,25 +276,73 @@ export default function ProductImageUploader({
     onChange(updated);
   };
 
+  const handleUpdateTitle = (index: number, title: string) => {
+    const updated = [...images];
+    updated[index] = { ...updated[index], image_title: title };
+    onChange(updated);
+  };
+
+  const handleApplyAutoSeoToAll = () => {
+    const updated = images.map((img, idx) => {
+      const alt = generateDynamicAlt(idx, img.is_primary);
+      return {
+        ...img,
+        alt_text: alt,
+        image_title: alt
+      };
+    });
+    onChange(updated);
+  };
+
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-4" id="product-image-uploader-section">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <div>
           <label className="block text-xs font-bold text-slate-200">
             Product Images &amp; Supabase Storage
           </label>
           <p className="text-[11px] text-slate-400 mt-0.5">
-            Upload multiple images directly to Supabase Storage. Set a primary thumbnail and adjust display order.
+            Images are saved in Supabase Storage with dynamic SEO alt texts, responsive resolutions, and search schema tags.
           </p>
         </div>
-        <button
-          type="button"
-          onClick={() => setShowManualInput(!showManualInput)}
-          className="text-[11px] font-semibold text-emerald-400 hover:text-emerald-300 transition flex items-center gap-1 bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20"
-        >
-          <Plus className="w-3 h-3" />
-          <span>{showManualInput ? 'Hide URL Input' : 'Add by URL'}</span>
-        </button>
+        
+        <div className="flex items-center gap-2">
+          {/* Auto SEO toggle */}
+          <button
+            type="button"
+            onClick={() => setAutoGenerateSeo(!autoGenerateSeo)}
+            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border transition flex items-center gap-1.5 ${
+              autoGenerateSeo
+                ? 'bg-emerald-500/10 border-emerald-500/30 text-emerald-400'
+                : 'bg-slate-900 border-slate-800 text-slate-400 hover:text-slate-300'
+            }`}
+            title="Auto-generate descriptive SEO alt tags and titles"
+          >
+            <Sparkles className="w-3 h-3" />
+            <span>{autoGenerateSeo ? 'Auto SEO Alt Tags [ON]' : 'Auto SEO [OFF]'}</span>
+          </button>
+
+          {images.length > 0 && (
+            <button
+              type="button"
+              onClick={handleApplyAutoSeoToAll}
+              className="text-[11px] font-semibold text-sky-400 hover:text-sky-300 transition flex items-center gap-1 bg-sky-500/10 px-2.5 py-1 rounded-lg border border-sky-500/20"
+              title="Apply naming template to all existing photos"
+            >
+              <Tag className="w-3 h-3" />
+              <span>Regenerate Alt Texts</span>
+            </button>
+          )}
+
+          <button
+            type="button"
+            onClick={() => setShowManualInput(!showManualInput)}
+            className="text-[11px] font-semibold text-slate-300 hover:text-white transition flex items-center gap-1 bg-slate-900 px-2.5 py-1 rounded-lg border border-slate-800"
+          >
+            <Plus className="w-3 h-3" />
+            <span>{showManualInput ? 'Hide URL' : 'Add by URL'}</span>
+          </button>
+        </div>
       </div>
 
       {globalError && (
@@ -256,7 +352,7 @@ export default function ProductImageUploader({
         </div>
       )}
 
-      {/* Manual URL Input dropdown */}
+      {/* Manual URL Input */}
       {showManualInput && (
         <div className="p-3 bg-slate-950 border border-slate-800 rounded-xl flex items-center gap-2">
           <input
@@ -305,7 +401,7 @@ export default function ProductImageUploader({
               Click to browse or drag &amp; drop product images
             </p>
             <p className="text-[10px] text-slate-400 mt-1">
-              Supports PNG, JPG, WebP, GIF up to 10MB each (Multi-select enabled)
+              Supports PNG, JPG, WebP up to 10MB each (Multi-select enabled)
             </p>
           </div>
         </div>
@@ -319,33 +415,33 @@ export default function ProductImageUploader({
               Uploaded Images ({images.length})
             </span>
             <span className="text-[11px]">
-              ⭐ Star icon designates the primary storefront image
+              ⭐ Star designates Primary (feeds Product Schema &amp; OpenGraph)
             </span>
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
             {images.map((img, index) => (
               <div
                 key={index}
-                className={`group relative bg-slate-950 border rounded-xl overflow-hidden p-2 flex flex-col justify-between transition-all ${
+                className={`group relative bg-slate-950 border rounded-xl overflow-hidden p-2.5 flex flex-col justify-between transition-all ${
                   img.is_primary
                     ? 'border-emerald-500/60 shadow-lg shadow-emerald-500/10 ring-1 ring-emerald-500/30'
                     : 'border-slate-800 hover:border-slate-700'
                 }`}
               >
                 {/* Image Preview */}
-                <div className="relative aspect-square w-full rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center border border-slate-800/80">
+                <div className="relative aspect-video w-full rounded-lg overflow-hidden bg-slate-900 flex items-center justify-center border border-slate-800/80">
                   <img
                     src={img.image_url}
                     alt={img.alt_text || 'Product image'}
-                    className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                    className="w-full h-full object-contain group-hover:scale-105 transition-transform duration-300"
                   />
 
                   {/* Primary Badge */}
                   {img.is_primary && (
-                    <div className="absolute top-1.5 left-1.5 bg-emerald-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded shadow-md flex items-center gap-0.5">
+                    <div className="absolute top-1.5 left-1.5 bg-emerald-600 text-white text-[9px] font-extrabold px-2 py-0.5 rounded-md shadow-md flex items-center gap-1">
                       <Star className="w-2.5 h-2.5 fill-current" />
-                      <span>PRIMARY</span>
+                      <span>PRIMARY / OPEN GRAPH</span>
                     </div>
                   )}
 
@@ -353,7 +449,7 @@ export default function ProductImageUploader({
                   {img.uploading && (
                     <div className="absolute inset-0 bg-slate-950/80 backdrop-blur-xs flex flex-col items-center justify-center text-white text-[10px] gap-1">
                       <Loader2 className="w-5 h-5 animate-spin text-emerald-400" />
-                      <span>Uploading to Supabase...</span>
+                      <span>Saving to Supabase Storage...</span>
                     </div>
                   )}
 
@@ -372,55 +468,63 @@ export default function ProductImageUploader({
                     className="absolute top-1.5 right-1.5 p-1 bg-slate-900/90 hover:bg-rose-600 text-slate-300 hover:text-white rounded-md transition shadow-md opacity-0 group-hover:opacity-100"
                     title="Remove Image"
                   >
-                    <X className="w-3 h-3" />
+                    <X className="w-3.5 h-3.5" />
                   </button>
                 </div>
 
-                {/* Image Controls */}
-                <div className="mt-2 space-y-1.5">
-                  <div className="flex items-center justify-between gap-1">
+                {/* Image Controls & SEO Fields */}
+                <div className="mt-2.5 space-y-2">
+                  <div className="flex items-center justify-between gap-1.5">
                     <button
                       type="button"
                       onClick={() => handleSetPrimary(index)}
-                      className={`flex-1 text-[10px] font-bold py-1 px-1.5 rounded transition flex items-center justify-center gap-1 ${
+                      className={`flex-1 text-[10px] font-bold py-1 px-2 rounded-lg transition flex items-center justify-center gap-1 ${
                         img.is_primary
                           ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                           : 'bg-slate-900 hover:bg-slate-800 text-slate-400 hover:text-slate-200 border border-slate-800'
                       }`}
                     >
-                      <Star className={`w-2.5 h-2.5 ${img.is_primary ? 'fill-current text-emerald-400' : ''}`} />
-                      <span>{img.is_primary ? 'Primary' : 'Make Primary'}</span>
+                      <Star className={`w-3 h-3 ${img.is_primary ? 'fill-current text-emerald-400' : ''}`} />
+                      <span>{img.is_primary ? 'Primary Image' : 'Set as Primary'}</span>
                     </button>
 
-                    <div className="flex items-center gap-0.5">
+                    <div className="flex items-center gap-1">
                       <button
                         type="button"
                         disabled={index === 0}
                         onClick={() => handleMove(index, 'left')}
-                        className="p-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-900 text-slate-300 rounded border border-slate-800 transition"
+                        className="p-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-900 text-slate-300 rounded-lg border border-slate-800 transition"
                         title="Move Left"
                       >
-                        <ArrowLeft className="w-2.5 h-2.5" />
+                        <ArrowLeft className="w-3 h-3" />
                       </button>
                       <button
                         type="button"
                         disabled={index === images.length - 1}
                         onClick={() => handleMove(index, 'right')}
-                        className="p-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-900 text-slate-300 rounded border border-slate-800 transition"
+                        className="p-1 bg-slate-900 hover:bg-slate-800 disabled:opacity-30 disabled:hover:bg-slate-900 text-slate-300 rounded-lg border border-slate-800 transition"
                         title="Move Right"
                       >
-                        <ArrowRight className="w-2.5 h-2.5" />
+                        <ArrowRight className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
 
-                  <input
-                    type="text"
-                    placeholder="Alt / Image title"
-                    value={img.alt_text || ''}
-                    onChange={(e) => handleUpdateAltText(index, e.target.value)}
-                    className="w-full px-2 py-0.5 bg-slate-900 border border-slate-800 rounded text-[10px] text-slate-300 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
-                  />
+                  <div>
+                    <label className="block text-[10px] font-semibold text-slate-400 mb-0.5 flex items-center justify-between">
+                      <span>Image Alt Text (SEO):</span>
+                      <span className="text-[9px] text-emerald-400 font-mono">
+                        {img.alt_text ? `${img.alt_text.length} chars` : 'missing'}
+                      </span>
+                    </label>
+                    <input
+                      type="text"
+                      placeholder="e.g. Wireless Gaming Mouse - Front Angle"
+                      value={img.alt_text || ''}
+                      onChange={(e) => handleUpdateAltText(index, e.target.value)}
+                      className="w-full px-2.5 py-1 bg-slate-900 border border-slate-800 rounded-lg text-[11px] text-slate-200 placeholder-slate-600 focus:outline-none focus:border-emerald-500"
+                    />
+                  </div>
                 </div>
               </div>
             ))}

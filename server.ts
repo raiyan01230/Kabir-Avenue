@@ -16,7 +16,8 @@ import {
   generateRssFeed,
   generateGoogleMerchantFeed,
   runSeoAudit,
-  pingSearchEngines
+  pingSearchEngines,
+  interpolateSeoTemplate
 } from './src/lib/seo-engine';
 
 let supabaseAdmin: ReturnType<typeof createClient> | null = null;
@@ -2086,8 +2087,22 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           fs.writeFileSync(distHtmlPath, distHtml, 'utf8');
         }
       }
+
+      // Also sync robots.txt if updated
+      const rSetting = settings.find((s: any) => s.settingKey === 'seo_robots_txt');
+      const uSetting = settings.find((s: any) => s.settingKey === 'seo_site_url');
+      let siteBase = uSetting?.settingValue || 'https://shmgadgetzone.onrender.com';
+      const robotsContent = generateRobotsTxt(siteBase, rSetting?.settingValue);
+      
+      const pubRobotsPath = path.join(process.cwd(), 'public', 'robots.txt');
+      fs.writeFileSync(pubRobotsPath, robotsContent, 'utf8');
+      
+      const distRobotsPath = path.join(process.cwd(), 'dist', 'robots.txt');
+      if (fs.existsSync(path.dirname(distRobotsPath))) {
+        fs.writeFileSync(distRobotsPath, robotsContent, 'utf8');
+      }
     } catch (syncErr) {
-      console.warn('Sync index.html warning:', syncErr);
+      console.warn('Sync assets warning:', syncErr);
     }
 
     res.json({ success: true });
@@ -2432,7 +2447,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       try {
         const db = getSupabaseAdmin();
         let customRules = '';
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        let baseUrl = 'https://shmgadgetzone.onrender.com';
         if (db) {
           const { data } = await (db.from('store_settings') as any).select('*');
           (data || []).forEach((row: any) => {
@@ -2441,13 +2456,26 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           });
         }
         const robots = generateRobotsTxt(baseUrl, customRules);
+        
+        // Also ensure public/robots.txt and dist/robots.txt match
+        try {
+          const pubRobotsPath = path.join(process.cwd(), 'public', 'robots.txt');
+          fs.writeFileSync(pubRobotsPath, robots, 'utf8');
+          const distRobotsPath = path.join(process.cwd(), 'dist', 'robots.txt');
+          if (fs.existsSync(path.dirname(distRobotsPath))) {
+            fs.writeFileSync(distRobotsPath, robots, 'utf8');
+          }
+        } catch {}
+
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
         res.send(robots);
       } catch (err: any) {
         console.error('Robots.txt error:', err);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.send(`User-agent: *\nAllow: /\nDisallow: /admin/\nSitemap: ${req.protocol}://${req.get('host')}/sitemap.xml\n`);
+        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+        const fallback = generateRobotsTxt('https://shmgadgetzone.onrender.com');
+        res.send(fallback);
       }
     });
 
@@ -2471,7 +2499,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           });
         }
 
-        const sitemap = generateMasterSitemap(baseUrl, products, categories);
+        const sitemap = generateMasterSitemap(baseUrl);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
         res.send(sitemap);
@@ -2557,7 +2585,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           });
         }
 
-        const sitemap = generateImagesSitemap(baseUrl, products, categories, logo);
+        const sitemap = generateImagesSitemap(baseUrl, products);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
         res.send(sitemap);
@@ -2745,6 +2773,152 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       }
     });
 
+    app.get("/api/admin/seo/redirects", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        let redirects: any[] = [];
+        if (db) {
+          const { data } = await (db.from('store_settings') as any)
+            .select('setting_value')
+            .eq('setting_key', 'seo_redirects')
+            .maybeSingle();
+          if (data?.setting_value) {
+            try {
+              redirects = JSON.parse(data.setting_value);
+            } catch {
+              redirects = [];
+            }
+          }
+        }
+        res.json({ success: true, redirects });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to fetch redirects' });
+      }
+    });
+
+    app.post("/api/admin/seo/redirects", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        const { redirects } = req.body;
+        if (!Array.isArray(redirects)) {
+          return res.status(400).json({ error: 'Redirects must be an array' });
+        }
+
+        if (db) {
+          await (db.from('store_settings') as any).upsert({
+            setting_key: 'seo_redirects',
+            setting_value: JSON.stringify(redirects),
+            setting_group: 'seo',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'setting_key' });
+        }
+
+        res.json({ success: true, count: redirects.length });
+      } catch (err: any) {
+        res.status(500).json({ error: err.message || 'Failed to save redirects' });
+      }
+    });
+
+    app.post("/api/admin/seo/bulk-image-optimize", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        if (!db) return res.status(500).json({ error: 'Database connection unavailable' });
+
+        const { data: products } = await (db.from('products') as any)
+          .select('*, product_images(*)')
+          .order('name');
+
+        let updatedImagesCount = 0;
+        if (products && Array.isArray(products)) {
+          for (const p of products) {
+            const pImages = p.product_images || [];
+            for (let idx = 0; idx < pImages.length; idx++) {
+              const img = pImages[idx];
+              if (!img.alt_text || img.alt_text.trim().length === 0 || img.alt_text === 'Product Image') {
+                const angle = idx === 0 ? 'Front View' : `Angle ${idx + 1}`;
+                const autoAlt = `${p.name} - ${angle}`;
+                await (db.from('product_images') as any)
+                  .update({ alt_text: autoAlt, image_title: autoAlt })
+                  .eq('id', img.id);
+                updatedImagesCount++;
+              }
+            }
+          }
+        }
+
+        res.json({
+          success: true,
+          message: `Successfully optimized and applied SEO alt text to ${updatedImagesCount} images.`,
+          updatedCount: updatedImagesCount
+        });
+      } catch (err: any) {
+        console.error('Bulk image SEO error:', err);
+        res.status(500).json({ error: err.message || 'Failed to optimize images' });
+      }
+    });
+
+    app.post("/api/admin/seo/bulk-template-apply", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        if (!db) return res.status(500).json({ error: 'Database connection unavailable' });
+
+        const { templateType, customTitleTemplate, customDescTemplate, overwriteAll } = req.body;
+
+        const [pRes, sRes] = await Promise.all([
+          (db.from('products') as any).select('*, categories(*)'),
+          (db.from('store_settings') as any).select('*')
+        ]);
+
+        let storeName = 'SHM Gadget Zone';
+        let tplTitle = customTitleTemplate || '{productName} | {storeName}';
+        let tplDesc = customDescTemplate || 'Buy authentic {productName} from {storeName}. Price ৳{price}. Warranty & fast nationwide delivery in Bangladesh.';
+
+        (sRes.data || []).forEach((row: any) => {
+          if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+          if (row.setting_key === 'seo_tpl_product_title' && row.setting_value && !customTitleTemplate) tplTitle = row.setting_value;
+          if (row.setting_key === 'seo_tpl_product_desc' && row.setting_value && !customDescTemplate) tplDesc = row.setting_value;
+        });
+
+        let updatedProductsCount = 0;
+        const products = pRes.data || [];
+
+        for (const p of products) {
+          if (!overwriteAll && p.seo_title && p.seo_description) {
+            continue; // Skip if already customized
+          }
+
+          const vars = {
+            productName: p.name,
+            storeName,
+            categoryName: p.categories?.name || 'Electronics',
+            price: Number(p.price || 0).toLocaleString(),
+            sku: p.sku || ''
+          };
+
+          const newTitle = interpolateSeoTemplate(tplTitle, vars);
+          const newDesc = interpolateSeoTemplate(tplDesc, vars);
+
+          await (db.from('products') as any)
+            .update({
+              seo_title: newTitle,
+              seo_description: newDesc.slice(0, 160)
+            })
+            .eq('id', p.id);
+
+          updatedProductsCount++;
+        }
+
+        res.json({
+          success: true,
+          message: `Applied SEO templates to ${updatedProductsCount} products.`,
+          updatedCount: updatedProductsCount
+        });
+      } catch (err: any) {
+        console.error('Bulk template apply error:', err);
+        res.status(500).json({ error: err.message || 'Failed to apply SEO template' });
+      }
+    });
+
     app.get("/api/admin/seo/verify-live", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
@@ -2818,10 +2992,47 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         const storeName = settingsMap['store_name'] || 'SHM Gadget Zone';
         const baseUrl = settingsMap['seo_site_url'] || `${req.protocol}://${req.get('host')}`;
         
-        const title = customMeta?.title || settingsMap['seo_title'] || `${storeName} | Authentic Electronics & Gadgets Bangladesh`;
-        const description = customMeta?.description || settingsMap['seo_description'] || 'Shop genuine smart gadgets, mobile accessories, audio gear, and lifestyle electronics in Bangladesh with nationwide express delivery.';
+        // Handle 301/302 Redirects configured by admin
+        if (settingsMap['seo_redirects']) {
+          try {
+            const redirectsList = JSON.parse(settingsMap['seo_redirects']);
+            if (Array.isArray(redirectsList)) {
+              const currentPath = req.path;
+              const matched = redirectsList.find((r: any) => r.is_active !== false && r.source === currentPath);
+              if (matched && matched.destination && matched.destination !== currentPath) {
+                return res.redirect(matched.status === 302 ? 302 : 301, matched.destination);
+              }
+            }
+          } catch (e) {
+            console.warn('Redirect evaluation error:', e);
+          }
+        }
+
+        // Check if a custom page SEO configuration exists for this route
+        let pageSpecificTitle = '';
+        let pageSpecificDesc = '';
+        let pageSpecificImage = '';
+        if (settingsMap['seo_pages_config']) {
+          try {
+            const pagesConfig = JSON.parse(settingsMap['seo_pages_config']);
+            if (Array.isArray(pagesConfig)) {
+              const currentPath = req.path;
+              const matchedPage = pagesConfig.find((p: any) => p.path === currentPath);
+              if (matchedPage) {
+                if (matchedPage.title) pageSpecificTitle = interpolateSeoTemplate(matchedPage.title, { storeName });
+                if (matchedPage.description) pageSpecificDesc = interpolateSeoTemplate(matchedPage.description, { storeName });
+                if (matchedPage.ogImage) pageSpecificImage = matchedPage.ogImage;
+              }
+            }
+          } catch {
+            // Ignore parse error
+          }
+        }
+
+        const title = customMeta?.title || pageSpecificTitle || settingsMap['seo_title'] || `${storeName} | Authentic Electronics & Gadgets Bangladesh`;
+        const description = customMeta?.description || pageSpecificDesc || settingsMap['seo_description'] || `Shop genuine smart gadgets, mobile accessories, audio gear, and lifestyle electronics in Bangladesh at ${storeName} with nationwide express delivery.`;
         const keywordsStr = Array.isArray(customMeta?.keywords) ? customMeta.keywords.join(', ') : (customMeta?.keywords || settingsMap['seo_keywords'] || 'gadgets bd, electronics bangladesh, online shopping bd, shm gadget zone, authentic gadgets dhaka');
-        const image = customMeta?.image || settingsMap['seo_og_image'] || settingsMap['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
+        const image = customMeta?.image || pageSpecificImage || settingsMap['seo_og_image'] || settingsMap['store_logo'] || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
         const url = customMeta?.url || `${baseUrl}${req.originalUrl || '/'}`;
 
         // Robust verification code extraction (extracts token whether user pasted raw code or full <meta .../> tag)
@@ -2839,7 +3050,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           bingCode = bingCode.replace(/<[^>]*>/g, '').replace(/["']/g, '').trim();
         }
 
-        let ga4Id = (settingsMap['seo_ga4_id'] || '').trim();
+        let ga4Id = (settingsMap['seo_ga4_id'] || 'G-HR4Z5MWEB4').trim();
         if (ga4Id) {
           const gaMatch = ga4Id.match(/G-[A-Z0-9]+/i);
           if (gaMatch) ga4Id = gaMatch[0];
@@ -2996,6 +3207,9 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
   <title>${title}</title>
   <meta name="description" content="${description}" />
   <meta name="keywords" content="${keywordsStr}" />
+  <meta name="robots" content="index, follow, max-image-preview:large, max-snippet:-1, max-video-preview:-1" />
+  <meta name="googlebot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
+  <meta name="bingbot" content="index, follow, max-snippet:-1, max-image-preview:large, max-video-preview:-1" />
   <link rel="canonical" href="${url}" />
   <link rel="alternate" hreflang="en-bd" href="${url}" />
   <link rel="alternate" hreflang="bn-bd" href="${url}" />
@@ -3041,21 +3255,30 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       }
     }
 
-    app.get('/product/:slug', async (req, res) => {
+    app.get(['/product/:slug', '/products/:slug'], async (req, res) => {
       try {
         const db = getSupabaseAdmin();
         const slug = req.params.slug;
         if (db) {
-          const { data: product } = await (db.from('products') as any)
-            .select('*, product_images(*), categories(*)')
-            .or(`slug.eq.${slug},id.eq.${slug}`)
-            .maybeSingle();
+          const [pRes, sRes] = await Promise.all([
+            (db.from('products') as any)
+              .select('*, product_images(*), categories(*)')
+              .or(`slug.eq.${slug},id.eq.${slug}`)
+              .maybeSingle(),
+            (db.from('store_settings') as any).select('*')
+          ]);
 
+          let storeName = 'SHM Gadget Zone';
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+          });
+
+          const product = pRes.data;
           if (product) {
             const img = product.image_url || product.imageUrl || (product.product_images?.[0]?.image_url) || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
             const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
-            const desc = product.seo_description || product.short_description || product.description?.replace(/<[^>]*>?/gm, '') || `Buy ${product.name} at best price in Bangladesh.`;
-            const seoTitle = product.seo_title || `${product.name} Price in BD | SHM Gadget Zone`;
+            const desc = product.seo_description || product.short_description || product.description?.replace(/<[^>]*>?/gm, '') || `Buy ${product.name} at best price in Bangladesh from ${storeName}.`;
+            const seoTitle = product.seo_title || `${product.name} Price in BD | ${storeName}`;
             const price = Number(product.price || 0).toLocaleString();
 
             return renderHtmlWithSEO(req, res, {
@@ -3092,17 +3315,23 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         const db = getSupabaseAdmin();
         const slug = req.params.slug;
         if (db) {
-          const { data: cat } = await (db.from('categories') as any)
-            .select('*')
-            .eq('slug', slug)
-            .maybeSingle();
+          const [cRes, sRes] = await Promise.all([
+            (db.from('categories') as any).select('*').eq('slug', slug).maybeSingle(),
+            (db.from('store_settings') as any).select('*')
+          ]);
 
+          let storeName = 'SHM Gadget Zone';
+          (sRes.data || []).forEach((row: any) => {
+            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+          });
+
+          const cat = cRes.data;
           if (cat) {
             const img = cat.image_url || cat.imageUrl || 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=1200&auto=format&fit=crop&q=80';
             const absoluteImg = img.startsWith('http') ? img : `${req.protocol}://${req.get('host')}${img}`;
             return renderHtmlWithSEO(req, res, {
-              title: `${cat.name} Price in Bangladesh | SHM Gadget Zone`,
-              description: cat.description || `Explore genuine ${cat.name} with official warranty and nationwide delivery across Bangladesh.`,
+              title: `${cat.name} Price in Bangladesh | ${storeName}`,
+              description: cat.description || `Explore genuine ${cat.name} with official warranty and nationwide delivery across Bangladesh from ${storeName}.`,
               image: absoluteImg,
               url: `${req.protocol}://${req.get('host')}/category/${slug}`,
               breadcrumbs: [
@@ -3117,6 +3346,11 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       } catch {
         return renderHtmlWithSEO(req, res);
       }
+    });
+
+    // Static store pages SEO SSR
+    app.get(['/shop', '/track', '/wishlist', '/account', '/about', '/contact', '/faq', '/terms', '/privacy', '/shipping', '/returns'], async (req, res) => {
+      return renderHtmlWithSEO(req, res);
     });
 
     // Google HTML File Verification Support (e.g. /google58x4iKvtWOTVs_O8HgwRU2w4SrtoYwvWCxrs50shOd4.html)

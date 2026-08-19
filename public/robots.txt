@@ -1,38 +1,41 @@
-# ==============================================================================
-# Static Fallback Robots.txt for SHM Gadget Zone / Hyperdrive Bangladesh
-# Real-time dynamic rules are served by Express at /robots.txt
-# ==============================================================================
-
+# Standard Googlebot & Search Engine Indexing Rules for Bangladesh
 User-agent: *
 Allow: /
 Allow: /shop
 Allow: /products
-Allow: /product/
-Allow: /category/
+Allow: /product/*
+Allow: /category/*
 Allow: /track
+Allow: /about
+Allow: /contact
+Allow: /faq
+Allow: /terms
+Allow: /privacy
 Allow: /feed.xml
 Allow: /google-merchant-feed.xml
 
-Disallow: /admin/
-Disallow: /api/admin/
-Disallow: /api/private/
-Disallow: /checkout/
+Disallow: /admin
+Disallow: /admin/*
+Disallow: /api/admin
+Disallow: /api/admin/*
+Disallow: /api/private
+Disallow: /checkout
 Disallow: /cart
-Disallow: /account/
+Disallow: /account
 
 User-agent: Googlebot
 Allow: /
 Disallow: /admin/
-Disallow: /api/admin/
 Disallow: /checkout/
 
 User-agent: Bingbot
 Allow: /
 Disallow: /admin/
-Disallow: /api/admin/
 Crawl-delay: 1
 
-Sitemap: /sitemap.xml
-Sitemap: /sitemap-products.xml
-Sitemap: /sitemap-categories.xml
-Sitemap: /sitemap-images.xml
+# Sitemaps
+Sitemap: https://shmgadgetzone.onrender.com/sitemap.xml
+Sitemap: https://shmgadgetzone.onrender.com/sitemap-products.xml
+Sitemap: https://shmgadgetzone.onrender.com/sitemap-categories.xml
+Sitemap: https://shmgadgetzone.onrender.com/sitemap-images.xml
+Sitemap: https://shmgadgetzone.onrender.com/sitemap-pages.xml
