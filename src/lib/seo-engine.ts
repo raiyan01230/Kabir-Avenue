@@ -175,9 +175,35 @@ export const DEFAULT_SEO_TEMPLATES = {
 /**
  * Generates an SEO-compliant robots.txt file with multi-bot support
  */
-export function generateRobotsTxt(baseUrl: string, customRules?: string): string {
-  const cleanBaseUrl = baseUrl ? baseUrl.replace(/\/+$/, '') : 'https://shmgadgetzone.onrender.com';
-  
+export function generateRobotsTxt(
+  baseUrl: string,
+  customRules?: string,
+  isMaintenanceMode: boolean = false,
+  allowSearchCrawling: boolean = true
+): string {
+  const rawBase = (baseUrl || '').trim();
+  let cleanBaseUrl = rawBase;
+  if (cleanBaseUrl && !cleanBaseUrl.startsWith('http://') && !cleanBaseUrl.startsWith('https://')) {
+    cleanBaseUrl = `https://${cleanBaseUrl}`;
+  }
+  cleanBaseUrl = cleanBaseUrl ? cleanBaseUrl.replace(/\/+$/, '') : 'https://shmgadgetzone.onrender.com';
+
+  // 1. Maintenance mode or search engine crawl paused
+  if (isMaintenanceMode || allowSearchCrawling === false) {
+    return `# Search Engine Crawling Paused (${isMaintenanceMode ? 'Maintenance Mode Active' : 'Staging / Crawling Disabled'})
+# Website is temporarily restricted from search engine indexing.
+User-agent: *
+Disallow: /
+
+User-agent: Googlebot
+Disallow: /
+
+User-agent: Bingbot
+Disallow: /
+`;
+  }
+
+  // 2. Custom rules supplied via Admin Panel
   if (customRules && typeof customRules === 'string' && customRules.trim().length > 0) {
     let normalized = customRules
       .replace(/\\r\\n/g, '\n')
@@ -189,52 +215,118 @@ export function generateRobotsTxt(baseUrl: string, customRules?: string): string
 
     let output = normalized + '\n\n';
     if (!output.includes('Sitemap:')) {
-      output += `# Sitemaps\nSitemap: ${cleanBaseUrl}/sitemap.xml\nSitemap: ${cleanBaseUrl}/sitemap-products.xml\nSitemap: ${cleanBaseUrl}/sitemap-categories.xml\nSitemap: ${cleanBaseUrl}/sitemap-images.xml\nSitemap: ${cleanBaseUrl}/sitemap-pages.xml\n`;
+      output += `# Dynamically Generated Sitemaps\nSitemap: ${cleanBaseUrl}/sitemap.xml\nSitemap: ${cleanBaseUrl}/sitemap-products.xml\nSitemap: ${cleanBaseUrl}/sitemap-categories.xml\nSitemap: ${cleanBaseUrl}/sitemap-images.xml\nSitemap: ${cleanBaseUrl}/sitemap-pages.xml\n`;
     }
     return output;
   }
 
-  return `# Standard Googlebot & Search Engine Indexing Rules
+  // 3. Default Production-Grade Google Search Central Compliant Robots.txt
+  return `# ==============================================================================
+# Dynamic Robots.txt for E-Commerce Storefront
+# Fully compliant with Google Search Central & Search Engine Webmaster Guidelines
+# ==============================================================================
+
+# Global Rules for all legitimate search crawlers
 User-agent: *
 Allow: /
 Allow: /shop
 Allow: /products
+Allow: /product/
 Allow: /product/*
+Allow: /category/
 Allow: /category/*
-Allow: /track
+Allow: /categories/
+Allow: /categories/*
 Allow: /about
+Allow: /about-us
 Allow: /contact
 Allow: /faq
-Allow: /terms
-Allow: /privacy
+Allow: /shipping
+Allow: /returns
+Allow: /track
 Allow: /feed.xml
+Allow: /rss.xml
 Allow: /google-merchant-feed.xml
 
-Disallow: /admin/
+# Block private / non-SEO customer account routes and admin portals
+Disallow: /admin
 Disallow: /admin/*
+Disallow: /account
+Disallow: /account/*
+Disallow: /login
+Disallow: /register
+Disallow: /cart
+Disallow: /checkout
+Disallow: /checkout/*
+Disallow: /wishlist
 Disallow: /api/admin/
 Disallow: /api/admin/*
 Disallow: /api/private/
-Disallow: /checkout/
-Disallow: /cart
-Disallow: /account/
+Disallow: /api/private/*
 
+# Explicit Googlebot Crawler Directive
 User-agent: Googlebot
 Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
+Allow: /categories/
+Allow: /categories/*
+Allow: /about
+Allow: /about-us
+Allow: /contact
+Allow: /faq
+Allow: /shipping
+Allow: /returns
+Allow: /track
 Disallow: /admin/
+Disallow: /account/
+Disallow: /login
+Disallow: /register
+Disallow: /cart
 Disallow: /checkout/
+Disallow: /wishlist
+Disallow: /api/
 
+# Google Search Console Inspection Tool & Mobile Crawler Directive
 User-agent: Google-InspectionTool
 Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
+Allow: /categories/
+Allow: /categories/*
 Disallow: /admin/
 Disallow: /checkout/
 
+# Google Image Search Bot
+User-agent: Googlebot-Image
+Allow: /
+Allow: /products/
+Allow: /product/
+
+# Microsoft Bingbot Crawler Directive
 User-agent: Bingbot
 Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
 Disallow: /admin/
+Disallow: /checkout/
 Crawl-delay: 1
 
-# Sitemaps
+# ==============================================================================
+# XML Sitemaps (Dynamically Generated from Database)
+# ==============================================================================
 Sitemap: ${cleanBaseUrl}/sitemap.xml
 Sitemap: ${cleanBaseUrl}/sitemap-products.xml
 Sitemap: ${cleanBaseUrl}/sitemap-categories.xml
@@ -393,9 +485,12 @@ export function generatePagesSitemap(baseUrl: string): string {
   const pages = [
     { loc: '/', priority: '1.0', freq: 'daily' },
     { loc: '/shop', priority: '0.9', freq: 'daily' },
-    { loc: '/track', priority: '0.7', freq: 'weekly' },
-    { loc: '/wishlist', priority: '0.6', freq: 'weekly' },
-    { loc: '/account', priority: '0.5', freq: 'monthly' }
+    { loc: '/track', priority: '0.8', freq: 'weekly' },
+    { loc: '/about', priority: '0.7', freq: 'monthly' },
+    { loc: '/contact', priority: '0.7', freq: 'monthly' },
+    { loc: '/faq', priority: '0.7', freq: 'monthly' },
+    { loc: '/shipping', priority: '0.7', freq: 'monthly' },
+    { loc: '/returns', priority: '0.7', freq: 'monthly' }
   ];
 
   let xml = `<?xml version="1.0" encoding="UTF-8"?>\n`;

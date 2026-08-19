@@ -1,41 +1,112 @@
-# Standard Googlebot & Search Engine Indexing Rules for Bangladesh
+# ==============================================================================
+# Dynamic Robots.txt for E-Commerce Storefront
+# Fully compliant with Google Search Central & Search Engine Webmaster Guidelines
+# ==============================================================================
+
+# Global Rules for all legitimate search crawlers
 User-agent: *
 Allow: /
 Allow: /shop
 Allow: /products
+Allow: /product/
 Allow: /product/*
+Allow: /category/
 Allow: /category/*
-Allow: /track
+Allow: /categories/
+Allow: /categories/*
 Allow: /about
+Allow: /about-us
 Allow: /contact
 Allow: /faq
-Allow: /terms
-Allow: /privacy
+Allow: /shipping
+Allow: /returns
+Allow: /track
 Allow: /feed.xml
+Allow: /rss.xml
 Allow: /google-merchant-feed.xml
 
+# Block private / non-SEO customer account routes and admin portals
 Disallow: /admin
 Disallow: /admin/*
-Disallow: /api/admin
-Disallow: /api/admin/*
-Disallow: /api/private
-Disallow: /checkout
-Disallow: /cart
 Disallow: /account
+Disallow: /account/*
+Disallow: /login
+Disallow: /register
+Disallow: /cart
+Disallow: /checkout
+Disallow: /checkout/*
+Disallow: /wishlist
+Disallow: /api/admin/
+Disallow: /api/admin/*
+Disallow: /api/private/
+Disallow: /api/private/*
 
+# Explicit Googlebot Crawler Directive
 User-agent: Googlebot
 Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
+Allow: /categories/
+Allow: /categories/*
+Allow: /about
+Allow: /about-us
+Allow: /contact
+Allow: /faq
+Allow: /shipping
+Allow: /returns
+Allow: /track
+Disallow: /admin/
+Disallow: /account/
+Disallow: /login
+Disallow: /register
+Disallow: /cart
+Disallow: /checkout/
+Disallow: /wishlist
+Disallow: /api/
+
+# Google Search Console Inspection Tool & Mobile Crawler Directive
+User-agent: Google-InspectionTool
+Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
+Allow: /categories/
+Allow: /categories/*
 Disallow: /admin/
 Disallow: /checkout/
 
+# Google Image Search Bot
+User-agent: Googlebot-Image
+Allow: /
+Allow: /products/
+Allow: /product/
+
+# Microsoft Bingbot Crawler Directive
 User-agent: Bingbot
 Allow: /
+Allow: /shop
+Allow: /products
+Allow: /product/
+Allow: /product/*
+Allow: /category/
+Allow: /category/*
 Disallow: /admin/
+Disallow: /checkout/
 Crawl-delay: 1
 
-# Sitemaps
+# ==============================================================================
+# XML Sitemaps (Dynamically Generated from Database)
+# ==============================================================================
 Sitemap: https://shmgadgetzone.onrender.com/sitemap.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-products.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-categories.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-images.xml
 Sitemap: https://shmgadgetzone.onrender.com/sitemap-pages.xml
+

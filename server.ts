@@ -2441,21 +2441,40 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
   });
 
     // -------------------------------------------------------------
+    // Helper to dynamically resolve Base Domain for SEO & Sitemaps
+    // -------------------------------------------------------------
+    function getDynamicBaseUrl(req: express.Request, settingsMap: Record<string, string> = {}): string {
+      let customUrl = settingsMap['seo_site_url'] || settingsMap['website_url'] || settingsMap['store_url'] || '';
+      if (customUrl && typeof customUrl === 'string' && customUrl.trim().length > 0) {
+        customUrl = customUrl.trim();
+        if (!customUrl.startsWith('http://') && !customUrl.startsWith('https://')) {
+          customUrl = `https://${customUrl}`;
+        }
+        return customUrl.replace(/\/+$/, '');
+      }
+      const proto = (req.headers['x-forwarded-proto'] as string) || req.protocol || 'https';
+      const host = req.get('host') || 'localhost:3000';
+      return `${proto}://${host}`.replace(/\/+$/, '');
+    }
+
+    // -------------------------------------------------------------
     // Dynamic SEO & Search Engine Indexing Routes
     // -------------------------------------------------------------
     app.get("/robots.txt", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let customRules = '';
-        let baseUrl = 'https://shmgadgetzone.onrender.com';
+        const settingsMap: Record<string, string> = {};
         if (db) {
           const { data } = await (db.from('store_settings') as any).select('*');
           (data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_robots_txt') customRules = row.setting_value;
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
-        const robots = generateRobotsTxt(baseUrl, customRules);
+        const customRules = settingsMap['seo_robots_txt'] || '';
+        const isMaintenance = settingsMap['maintenance_mode'] === 'true' || settingsMap['maintenance_mode'] === '1' || settingsMap['is_maintenance'] === 'true';
+        const allowCrawling = settingsMap['seo_crawl_allowed'] !== 'false';
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
+        const robots = generateRobotsTxt(baseUrl, customRules, isMaintenance, allowCrawling);
         
         // Also ensure public/robots.txt and dist/robots.txt match
         try {
@@ -2468,13 +2487,14 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
         } catch {}
 
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
-        res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
+        res.setHeader('Cache-Control', isMaintenance ? 'no-cache, no-store, must-revalidate' : 'public, max-age=300, must-revalidate');
         res.send(robots);
       } catch (err: any) {
         console.error('Robots.txt error:', err);
         res.setHeader('Content-Type', 'text/plain; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=300, must-revalidate');
-        const fallback = generateRobotsTxt('https://shmgadgetzone.onrender.com');
+        const fallbackUrl = getDynamicBaseUrl(req, {});
+        const fallback = generateRobotsTxt(fallbackUrl);
         res.send(fallback);
       }
     });
@@ -2482,23 +2502,16 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get("/sitemap.xml", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
-        let products: any[] = [];
-        let categories: any[] = [];
+        const settingsMap: Record<string, string> = {};
 
         if (db) {
-          const [pRes, cRes, sRes] = await Promise.all([
-            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
-            (db.from('categories') as any).select('*').order('name'),
-            (db.from('store_settings') as any).select('*')
-          ]);
-          products = pRes.data || [];
-          categories = cRes.data || [];
-          (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+          const { data: sData } = await (db.from('store_settings') as any).select('*');
+          (sData || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
         const sitemap = generateMasterSitemap(baseUrl);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2512,7 +2525,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get("/sitemap-products.xml", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        const settingsMap: Record<string, string> = {};
         let products: any[] = [];
 
         if (db) {
@@ -2522,10 +2535,11 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           ]);
           products = pRes.data || [];
           (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
         const sitemap = generateProductsSitemap(baseUrl, products);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2539,7 +2553,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get("/sitemap-categories.xml", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        const settingsMap: Record<string, string> = {};
         let categories: any[] = [];
 
         if (db) {
@@ -2549,10 +2563,11 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           ]);
           categories = cRes.data || [];
           (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
         const sitemap = generateCategoriesSitemap(baseUrl, categories);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2566,25 +2581,21 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get("/sitemap-images.xml", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        const settingsMap: Record<string, string> = {};
         let products: any[] = [];
-        let categories: any[] = [];
-        let logo = '';
 
         if (db) {
-          const [pRes, cRes, sRes] = await Promise.all([
+          const [pRes, sRes] = await Promise.all([
             (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
-            (db.from('categories') as any).select('*').order('name'),
             (db.from('store_settings') as any).select('*')
           ]);
           products = pRes.data || [];
-          categories = cRes.data || [];
           (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
-            if (row.setting_key === 'store_logo' && row.setting_value) logo = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
         const sitemap = generateImagesSitemap(baseUrl, products);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2598,13 +2609,14 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get("/sitemap-pages.xml", async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
+        const settingsMap: Record<string, string> = {};
         if (db) {
           const { data } = await (db.from('store_settings') as any).select('*');
           (data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
         const sitemap = generatePagesSitemap(baseUrl);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2618,9 +2630,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get(["/feed.xml", "/rss.xml"], async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
-        let storeName = 'SHM Gadget Zone';
-        let storeDesc = 'Authentic electronics & gadgets catalog for Bangladesh';
+        const settingsMap: Record<string, string> = {};
         let products: any[] = [];
 
         if (db) {
@@ -2630,12 +2640,13 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           ]);
           products = pRes.data || [];
           (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
-            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
-            if (row.setting_key === 'seo_description' && row.setting_value) storeDesc = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
+        const storeName = settingsMap['store_name'] || 'SHM Gadget Zone';
+        const storeDesc = settingsMap['seo_description'] || 'Authentic electronics & gadgets catalog for Bangladesh';
         const rss = generateRssFeed(baseUrl, storeName, storeDesc, products);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2649,8 +2660,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     app.get(["/google-merchant-feed.xml", "/api/seo/google-merchant-feed.xml"], async (req, res) => {
       try {
         const db = getSupabaseAdmin();
-        let baseUrl = `${req.protocol}://${req.get('host')}`;
-        let storeName = 'SHM Gadget Zone';
+        const settingsMap: Record<string, string> = {};
         let products: any[] = [];
 
         if (db) {
@@ -2660,11 +2670,12 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
           ]);
           products = pRes.data || [];
           (sRes.data || []).forEach((row: any) => {
-            if (row.setting_key === 'seo_site_url' && row.setting_value) baseUrl = row.setting_value;
-            if (row.setting_key === 'store_name' && row.setting_value) storeName = row.setting_value;
+            settingsMap[row.setting_key] = row.setting_value;
           });
         }
 
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
+        const storeName = settingsMap['store_name'] || 'SHM Gadget Zone';
         const feed = generateGoogleMerchantFeed(baseUrl, storeName, products);
         res.setHeader('Content-Type', 'application/xml; charset=utf-8');
         res.setHeader('Cache-Control', 'public, max-age=3600');
@@ -2745,6 +2756,79 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       } catch (err: any) {
         console.error('SEO stats error:', err);
         res.status(500).json({ error: err.message || 'Failed to load SEO stats' });
+      }
+    });
+
+    app.get("/api/admin/seo/robots-preview", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        const settingsMap: Record<string, string> = {};
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
+          });
+        }
+        const customRules = settingsMap['seo_robots_txt'] || '';
+        const isMaintenance = settingsMap['maintenance_mode'] === 'true' || settingsMap['maintenance_mode'] === '1' || settingsMap['is_maintenance'] === 'true';
+        const allowCrawling = settingsMap['seo_crawl_allowed'] !== 'false';
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
+        const robotsContent = generateRobotsTxt(baseUrl, customRules, isMaintenance, allowCrawling);
+
+        res.json({
+          success: true,
+          baseUrl,
+          isMaintenance,
+          allowCrawling,
+          hasCustomRules: !!(customRules && customRules.trim().length > 0),
+          robotsContent
+        });
+      } catch (err: any) {
+        console.error('Robots preview error:', err);
+        res.status(500).json({ error: err.message || 'Failed to preview robots.txt' });
+      }
+    });
+
+    app.post("/api/admin/seo/robots-reset", async (req, res) => {
+      try {
+        const db = getSupabaseAdmin();
+        if (db) {
+          await (db.from('store_settings') as any).upsert({
+            setting_key: 'seo_robots_txt',
+            setting_value: '',
+            setting_group: 'seo',
+            updated_at: new Date().toISOString()
+          }, { onConflict: 'setting_key' });
+        }
+
+        const settingsMap: Record<string, string> = {};
+        if (db) {
+          const { data } = await (db.from('store_settings') as any).select('*');
+          (data || []).forEach((row: any) => {
+            settingsMap[row.setting_key] = row.setting_value;
+          });
+        }
+        const baseUrl = getDynamicBaseUrl(req, settingsMap);
+        const robots = generateRobotsTxt(baseUrl, '', false, true);
+
+        // Synchronize on-disk files
+        try {
+          const pubRobotsPath = path.join(process.cwd(), 'public', 'robots.txt');
+          fs.writeFileSync(pubRobotsPath, robots, 'utf8');
+          const distRobotsPath = path.join(process.cwd(), 'dist', 'robots.txt');
+          if (fs.existsSync(path.dirname(distRobotsPath))) {
+            fs.writeFileSync(distRobotsPath, robots, 'utf8');
+          }
+        } catch {}
+
+        res.json({
+          success: true,
+          message: 'Robots.txt has been reset to dynamic Google Search Console recommended rules.',
+          robotsContent: robots
+        });
+      } catch (err: any) {
+        console.error('Robots reset error:', err);
+        res.status(500).json({ error: err.message || 'Failed to reset robots.txt' });
       }
     });
 

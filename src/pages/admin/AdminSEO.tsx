@@ -146,8 +146,32 @@ export default function AdminSEO() {
   // SERP Preview Mode
   const [serpDevice, setSerpDevice] = useState<'desktop' | 'mobile'>('desktop');
 
+  // Robots Reset state
+  const [robotsResetting, setRobotsResetting] = useState(false);
+  const [robotsResetMsg, setRobotsResetMsg] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const admin_email = JSON.parse(localStorage.getItem('admin_session') || '{}').email || 'admin@shmgadgetzone.com';
+
+  const handleResetRobots = async () => {
+    if (!window.confirm('Reset robots.txt to Google Search Console recommended dynamic rules? This will remove custom overrides and ensure all public pages (products, categories, shop, etc.) are crawlable.')) {
+      return;
+    }
+    setRobotsResetting(true);
+    setRobotsResetMsg(null);
+    try {
+      const res = await fetch('/api/admin/seo/robots-reset', { method: 'POST' });
+      const data = await res.json();
+      if (data.success) {
+        setSettings(prev => ({ ...prev, seo_robots_txt: '', seo_crawl_allowed: 'true' }));
+        setRobotsResetMsg(data.message || 'Robots.txt successfully reset to Google Search Console compliant rules!');
+        setTimeout(() => setRobotsResetMsg(null), 5000);
+      }
+      setRobotsResetting(false);
+    } catch {
+      setRobotsResetting(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -1469,34 +1493,140 @@ export default function AdminSEO() {
       {/* ============================================================ */}
       {activeTab === 'robots' && (
         <form onSubmit={handleSave} className="space-y-6">
-          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          {robotsResetMsg && (
+            <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 text-emerald-400 text-xs rounded-2xl flex items-center gap-2.5 animate-fadeIn">
+              <CheckCircle2 className="w-4 h-4 shrink-0" />
+              <span><strong>Success:</strong> {robotsResetMsg}</span>
+            </div>
+          )}
+
+          {/* Crawl Status & Quick Actions Bar */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-5">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
               <div>
-                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Dynamic Robots.txt Configuration</h3>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Search Engine Crawlability Status</h3>
                 <p className="text-[11px] text-slate-400 mt-0.5">
                   Controls search crawler access for Googlebot, Bingbot, and AI indexing bots. Always synchronized with disk &amp; database.
                 </p>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={handleResetRobots}
+                  disabled={robotsResetting}
+                  className="px-3.5 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 text-xs font-bold rounded-xl border border-amber-500/30 transition flex items-center gap-1.5"
+                  title="Reset to recommended Google Search Console dynamic rules"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${robotsResetting ? 'animate-spin' : ''}`} />
+                  <span>{robotsResetting ? 'Resetting...' : 'Reset to Recommended Google Rules'}</span>
+                </button>
+
                 <a
                   href="/robots.txt"
                   target="_blank"
                   rel="noreferrer"
-                  className="px-3 py-1.5 bg-slate-950 hover:bg-slate-800 text-slate-300 text-xs font-semibold rounded-xl border border-slate-800 transition flex items-center gap-1.5"
+                  className="px-3.5 py-1.5 bg-slate-950 hover:bg-slate-800 text-emerald-400 text-xs font-bold rounded-xl border border-slate-800 transition flex items-center gap-1.5"
                 >
                   <ExternalLink className="w-3.5 h-3.5" />
-                  <span>View Live /robots.txt</span>
+                  <span>Test Live /robots.txt</span>
                 </a>
               </div>
             </div>
 
+            {/* Crawl Allowed Control */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2 border-t border-slate-800">
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5">
+                  Search Engine Crawling Permission
+                </label>
+                <select
+                  value={settings['seo_crawl_allowed'] || 'true'}
+                  onChange={(e) => handleChange('seo_crawl_allowed', e.target.value)}
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-semibold focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="true">✅ Allowed (Recommended - Allow Googlebot, Bingbot, and Search Engines to Crawl)</option>
+                  <option value="false">⛔ Blocked (Disallow: / - For Staging or Under Development Only)</option>
+                </select>
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Keep set to <strong>Allowed</strong> so Google Search Console can freely index your products, categories, and homepage.
+                </p>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-slate-200 mb-1.5">
+                  Dynamic Canonical Base URL
+                </label>
+                <input
+                  type="text"
+                  value={settings['seo_site_url'] || settings['website_url'] || ''}
+                  onChange={(e) => handleChange('seo_site_url', e.target.value)}
+                  placeholder="e.g. https://shmgadgetzone.onrender.com"
+                  className="w-full px-3.5 py-2.5 bg-slate-950 border border-slate-800 rounded-xl text-white text-xs font-mono focus:outline-none focus:border-emerald-500"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  All sitemap directives in robots.txt will dynamically reference this exact domain.
+                </p>
+              </div>
+            </div>
+
+            {/* Live Crawlability Verification Status */}
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-2">
+              <div className="p-4 bg-slate-950 rounded-xl border border-emerald-500/20 space-y-2">
+                <div className="flex items-center gap-2 text-emerald-400 text-xs font-bold">
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  <span>Public Routes Crawlable (Allow Directives)</span>
+                </div>
+                <ul className="text-[11px] text-slate-300 space-y-1 font-mono">
+                  <li>✔ / (Homepage)</li>
+                  <li>✔ /shop (Catalog)</li>
+                  <li>✔ /products &amp; /product/* (Product Detail Pages)</li>
+                  <li>✔ /categories &amp; /category/* (Category Landing Pages)</li>
+                  <li>✔ /about, /contact, /faq, /shipping, /returns, /track</li>
+                </ul>
+              </div>
+
+              <div className="p-4 bg-slate-950 rounded-xl border border-slate-800 space-y-2">
+                <div className="flex items-center gap-2 text-slate-300 text-xs font-bold">
+                  <ShieldCheck className="w-4 h-4 text-sky-400 shrink-0" />
+                  <span>Protected Private Routes (Disallow Directives)</span>
+                </div>
+                <ul className="text-[11px] text-slate-400 space-y-1 font-mono">
+                  <li>✖ /admin &amp; /admin/* (Admin Dashboard)</li>
+                  <li>✖ /account &amp; /account/* (User Account Data)</li>
+                  <li>✖ /checkout &amp; /cart &amp; /wishlist</li>
+                  <li>✖ /api/admin/* &amp; /api/private/* (Internal APIs)</li>
+                </ul>
+              </div>
+            </div>
+          </div>
+
+          {/* Custom Rules Override Box */}
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-6 space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-xs font-bold text-white uppercase tracking-wider">Custom Robots.txt Overrides (Optional)</h3>
+                <p className="text-[11px] text-slate-400 mt-0.5">
+                  Leave this field empty to use the fully automated, dynamic Google Search Console compliant configuration. If you provide custom rules, sitemap declarations are automatically appended.
+                </p>
+              </div>
+              {settings['seo_robots_txt'] && settings['seo_robots_txt'].trim().length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => handleChange('seo_robots_txt', '')}
+                  className="text-xs text-amber-400 hover:text-amber-300 hover:underline font-semibold"
+                >
+                  Clear Custom Override
+                </button>
+              )}
+            </div>
+
             <div>
               <textarea
-                rows={14}
+                rows={10}
                 value={settings['seo_robots_txt'] || ''}
                 onChange={(e) => handleChange('seo_robots_txt', e.target.value)}
-                placeholder={`User-agent: *\nAllow: /\nDisallow: /admin/\nDisallow: /checkout/\n\nSitemap: https://shmgadgetzone.onrender.com/sitemap.xml`}
+                placeholder="[Leave empty to use recommended dynamic rules, or type custom user-agent directives here]"
                 className="w-full p-4 bg-slate-950 border border-slate-800 rounded-xl text-emerald-400 font-mono text-xs focus:outline-none focus:border-emerald-500 leading-relaxed"
               />
             </div>
