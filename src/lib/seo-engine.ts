@@ -259,10 +259,10 @@ Disallow: /cart
 Disallow: /checkout
 Disallow: /checkout/*
 Disallow: /wishlist
-Disallow: /api/admin/
-Disallow: /api/admin/*
-Disallow: /api/private/
-Disallow: /api/private/*
+# Disallow: /api/admin/
+# Disallow: /api/admin/*
+# Disallow: /api/private/
+# Disallow: /api/private/*
 
 # Explicit Googlebot Crawler Directive
 User-agent: Googlebot
@@ -289,7 +289,7 @@ Disallow: /register
 Disallow: /cart
 Disallow: /checkout/
 Disallow: /wishlist
-Disallow: /api/
+# Disallow: /api/
 
 # Google Search Console Inspection Tool & Mobile Crawler Directive
 User-agent: Google-InspectionTool
