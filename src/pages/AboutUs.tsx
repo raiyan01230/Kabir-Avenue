@@ -1,23 +1,76 @@
 import React, { useState, useEffect } from 'react';
-import { ShieldCheck, Award, Truck, Users, CheckCircle2, ArrowRight, Sparkles, HeartHandshake } from 'lucide-react';
+import { ShieldCheck, Award, Truck, Users, CheckCircle2, ArrowRight, Sparkles, HeartHandshake, Loader2 } from 'lucide-react';
 import { getStoreSettings, subscribeToStoreUpdates } from '../lib/queries';
 import { Link } from 'react-router-dom';
 
+const DEFAULT_ABOUT_CONTENT = {
+  pageTitle: "About Us",
+  subtitle: "Building Bangladesh's Premier Next-Gen E-Commerce Experience",
+  mainDescription: "Welcome to our store, where technology meets uncompromising quality. We pride ourselves on delivering authentic products with world-class customer service across Bangladesh.",
+  ourStory: "Founded with a passion for excellence, we started as a small team dedicated to bringing genuine, high-performance electronics and lifestyle products directly to doorstep buyers in Dhaka and beyond.",
+  mission: "To empower every Bangladeshi household and professional with cutting-edge gear, unbeatable prices, and lightning-fast nationwide delivery.",
+  vision: "To become the most trusted and customer-centric e-commerce brand in South Asia.",
+  whyChooseUs: [
+    "100% Authentic Products with Official Warranty",
+    "Lightning Fast Delivery Inside & Outside Dhaka",
+    "Dedicated 24/7 Customer Support Hotline",
+    "Secure & Flexible Payment Options"
+  ],
+  customerCommitment: "Your satisfaction is our ultimate benchmark. Every order is meticulously packaged and inspected before dispatch.",
+  callToAction: "Ready to upgrade your daily lifestyle?",
+  buttonText: "Explore Shop Now",
+  buttonLink: "/shop",
+  imageUrl: "https://images.unsplash.com/photo-1556742049-0a67d553c24d?auto=format&fit=crop&w=1200",
+  enabledSections: {
+    story: true,
+    missionVision: true,
+    whyChooseUs: true,
+    commitment: true,
+    cta: true
+  }
+};
+
 export default function AboutUs() {
-  const [content, setContent] = useState<any>(null);
+  const [content, setContent] = useState<any>(DEFAULT_ABOUT_CONTENT);
   const [settings, setSettings] = useState<Record<string, string>>({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
 
   const loadAboutData = async () => {
     try {
-      const [aboutRes, stRes] = await Promise.all([
-        fetch('/api/about-us').then(r => r.json()),
-        getStoreSettings()
-      ]);
-      setContent(aboutRes);
-      setSettings(stRes);
-    } catch {
-      // ignore
+      // 1. Fetch store settings
+      const stRes = await getStoreSettings().catch(() => ({}));
+      if (stRes && typeof stRes === 'object') {
+        setSettings(stRes);
+      }
+
+      // 2. Try fetching from API endpoint
+      let loadedContent = null;
+      try {
+        const res = await fetch('/api/about-us');
+        if (res.ok) {
+          const json = await res.json();
+          if (json && !json.error && typeof json === 'object' && Object.keys(json).length > 0) {
+            loadedContent = json;
+          }
+        }
+      } catch (e) {
+        console.warn('API /api/about-us not reachable, checking database fallback', e);
+      }
+
+      // 3. If API didn't return content, check store settings directly
+      if (!loadedContent && stRes && stRes['about_us_content']) {
+        try {
+          loadedContent = JSON.parse(stRes['about_us_content']);
+        } catch {
+          // ignore parse error
+        }
+      }
+
+      if (loadedContent) {
+        setContent((prev: any) => ({ ...prev, ...loadedContent }));
+      }
+    } catch (err) {
+      console.warn('Error loading about data:', err);
     } finally {
       setLoading(false);
     }
@@ -29,15 +82,7 @@ export default function AboutUs() {
     return () => unsub();
   }, []);
 
-  const storeName = settings['store_name'] || content?.pageTitle || 'SHM Gadget Zone';
-
-  if (loading || !content) {
-    return (
-      <div className="min-h-screen bg-white flex items-center justify-center text-xs text-slate-500">
-        Loading About Us...
-      </div>
-    );
-  }
+  const storeName = settings['store_name'] || content?.pageTitle || 'Kabir Avenue';
 
   return (
     <div className="min-h-screen bg-white text-slate-900 pb-20">
@@ -77,7 +122,7 @@ export default function AboutUs() {
           <div className="lg:col-span-6">
             <div className="relative rounded-3xl overflow-hidden shadow-xl border border-slate-200 aspect-[4/3]">
               <img
-                src={content.imageUrl || "https://images.unsplash.com/photo-1556742049-0a67d553c24d?auto=format&fit=crop&q=80&w=1200"}
+                src={content.imageUrl || "https://images.unsplash.com/photo-1556742049-0a67d553c24d?auto=format&fit=crop&w=1200"}
                 alt="About Store"
                 className="w-full h-full object-cover"
                 referrerPolicy="no-referrer"
@@ -170,3 +215,4 @@ export default function AboutUs() {
     </div>
   );
 }
+

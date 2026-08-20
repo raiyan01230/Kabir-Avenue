@@ -1,44 +1,79 @@
 import React, { useEffect, useState } from 'react';
 import { Save, Image as ImageIcon, CheckCircle2, Plus, Trash2 } from 'lucide-react';
 import ProductImageUploader from '../../components/admin/ProductImageUploader';
+import { getStoreSettings } from '../../lib/queries';
+
+const DEFAULT_ABOUT = {
+  pageTitle: 'About Us',
+  subtitle: "Building Bangladesh's Premier Next-Gen E-Commerce Experience",
+  mainDescription: "Welcome to our store, where technology meets uncompromising quality. We pride ourselves on delivering authentic products with world-class customer service across Bangladesh.",
+  ourStory: "Founded with a passion for excellence, we started as a small team dedicated to bringing genuine, high-performance electronics and lifestyle products directly to doorstep buyers in Dhaka and beyond.",
+  mission: "To empower every Bangladeshi household and professional with cutting-edge gear, unbeatable prices, and lightning-fast nationwide delivery.",
+  vision: "To become the most trusted and customer-centric e-commerce brand in South Asia.",
+  whyChooseUs: [
+    "100% Authentic Products with Official Warranty",
+    "Lightning Fast Delivery Inside & Outside Dhaka",
+    "Dedicated 24/7 Customer Support Hotline",
+    "Secure & Flexible Payment Options"
+  ],
+  customerCommitment: "Your satisfaction is our ultimate benchmark. Every order is meticulously packaged and inspected before dispatch.",
+  callToAction: "Ready to upgrade your daily lifestyle?",
+  buttonText: "Explore Shop Now",
+  buttonLink: "/shop",
+  imageUrl: "https://images.unsplash.com/photo-1556742049-0a67d553c24d?auto=format&fit=crop&w=1200",
+  enabledSections: {
+    story: true,
+    missionVision: true,
+    whyChooseUs: true,
+    commitment: true,
+    cta: true
+  }
+};
 
 export default function AdminAboutUs() {
-  const [content, setContent] = useState<any>({
-    pageTitle: 'About Us',
-    subtitle: '',
-    mainDescription: '',
-    ourStory: '',
-    mission: '',
-    vision: '',
-    whyChooseUs: [],
-    customerCommitment: '',
-    callToAction: '',
-    buttonText: 'Explore Shop Now',
-    buttonLink: '/shop',
-    imageUrl: '',
-    enabledSections: {
-      story: true,
-      missionVision: true,
-      whyChooseUs: true,
-      commitment: true,
-      cta: true
-    }
-  });
+  const [content, setContent] = useState<any>(DEFAULT_ABOUT);
   const [newItem, setNewItem] = useState('');
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(false);
   const [saving, setSaving] = useState(false);
   const [success, setSuccess] = useState(false);
 
   useEffect(() => {
-    fetch('/api/about-us')
-      .then(r => r.json())
-      .then(data => {
-        if (data && typeof data === 'object') {
-          setContent(prev => ({ ...prev, ...data }));
+    const load = async () => {
+      try {
+        let loaded = null;
+        try {
+          const r = await fetch('/api/about-us');
+          if (r.ok) {
+            const data = await r.json();
+            if (data && typeof data === 'object' && !data.error && Object.keys(data).length > 0) {
+              loaded = data;
+            }
+          }
+        } catch {
+          // ignore API error
         }
+
+        if (!loaded) {
+          const st = await getStoreSettings().catch(() => ({}));
+          if (st && st['about_us_content']) {
+            try {
+              loaded = JSON.parse(st['about_us_content']);
+            } catch {
+              // ignore
+            }
+          }
+        }
+
+        if (loaded) {
+          setContent((prev: any) => ({ ...prev, ...loaded }));
+        }
+      } catch (err) {
+        console.warn('Error loading about us editor data:', err);
+      } finally {
         setLoading(false);
-      })
-      .catch(() => setLoading(false));
+      }
+    };
+    load();
   }, []);
 
   const handleSave = async (e: React.FormEvent) => {
