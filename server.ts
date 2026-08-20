@@ -3587,6 +3587,155 @@ app.delete('/api/store/presets/:id', async (req, res) => {
 });
 
 
+  // --- CONTACT LOCATIONS API ---
+  app.get('/api/contact-locations', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json([]);
+      const { data } = await (db.from('store_settings') as any)
+        .select('setting_value')
+        .eq('setting_key', 'contact_locations_list')
+        .maybeSingle();
+      if (data?.setting_value) {
+        try {
+          return res.json(JSON.parse(data.setting_value));
+        } catch {}
+      }
+      // Default locations
+      const defaultLocs = [
+        {
+          id: 'loc_1',
+          title: 'Head Office & Experience Showroom',
+          type: 'Head Office',
+          address: 'Level 4, Tech Plaza, Agargaon, Dhaka-1207',
+          phone: '+880 1700-000000',
+          email: 'support@shmgadgetzone.bd',
+          hours: 'Saturday – Thursday: 10:00 AM – 8:00 PM'
+        },
+        {
+          id: 'loc_2',
+          title: 'Central Warehouse & Dispatch Hub',
+          type: 'Warehouse',
+          address: 'Warehouse Hub, Tejgaon Industrial Area, Dhaka',
+          phone: '+880 1800-000000',
+          email: 'warehouse@shmgadgetzone.bd',
+          hours: 'Saturday – Thursday: 9:00 AM – 6:00 PM'
+        }
+      ];
+      res.json(defaultLocs);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/contact-locations', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { title, type, address, phone, email, hours } = req.body;
+      if (!title || !address) {
+        return res.status(400).json({ error: 'Title and address are required' });
+      }
+
+      // Fetch existing
+      const { data: existingRow } = await (db.from('store_settings') as any)
+        .select('setting_value')
+        .eq('setting_key', 'contact_locations_list')
+        .maybeSingle();
+      
+      let list: any[] = [];
+      try {
+        if (existingRow?.setting_value) list = JSON.parse(existingRow.setting_value);
+      } catch {}
+
+      const newLoc = {
+        id: `loc_${Date.now()}`,
+        title,
+        type: type || 'Head Office',
+        address,
+        phone: phone || '',
+        email: email || '',
+        hours: hours || ''
+      };
+
+      list.push(newLoc);
+
+      await (db.from('store_settings') as any).upsert({
+        setting_key: 'contact_locations_list',
+        setting_value: JSON.stringify(list),
+        description: 'Store Contact Locations List',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'setting_key' });
+
+      res.json({ success: true, location: newLoc, locations: list });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/contact-locations/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { id } = req.params;
+      const { title, type, address, phone, email, hours } = req.body;
+
+      const { data: existingRow } = await (db.from('store_settings') as any)
+        .select('setting_value')
+        .eq('setting_key', 'contact_locations_list')
+        .maybeSingle();
+      
+      let list: any[] = [];
+      try {
+        if (existingRow?.setting_value) list = JSON.parse(existingRow.setting_value);
+      } catch {}
+
+      list = list.map(item => item.id === id ? { ...item, title, type, address, phone, email, hours } : item);
+
+      await (db.from('store_settings') as any).upsert({
+        setting_key: 'contact_locations_list',
+        setting_value: JSON.stringify(list),
+        description: 'Store Contact Locations List',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'setting_key' });
+
+      res.json({ success: true, locations: list });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/contact-locations/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { id } = req.params;
+
+      const { data: existingRow } = await (db.from('store_settings') as any)
+        .select('setting_value')
+        .eq('setting_key', 'contact_locations_list')
+        .maybeSingle();
+      
+      let list: any[] = [];
+      try {
+        if (existingRow?.setting_value) list = JSON.parse(existingRow.setting_value);
+      } catch {}
+
+      list = list.filter(item => item.id !== id);
+
+      await (db.from('store_settings') as any).upsert({
+        setting_key: 'contact_locations_list',
+        setting_value: JSON.stringify(list),
+        description: 'Store Contact Locations List',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'setting_key' });
+
+      res.json({ success: true, locations: list });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
   // --- CONTACT MESSAGES API ---
   app.get('/api/contact-messages', async (req, res) => {
     try {

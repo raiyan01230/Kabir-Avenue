@@ -3,7 +3,7 @@ import { Outlet, useNavigate, useLocation, Link } from 'react-router-dom';
 import {
   LayoutDashboard, Package, Layers, ShoppingCart, Users, Truck,
   Star, Tag, Image, BarChart3, Settings, Activity, ShieldAlert,
-  LogOut, ChevronRight, Store, Database, Printer, Globe, ShieldCheck, Download, Sparkles
+  LogOut, ChevronRight, Store, Database, Printer, Globe, ShieldCheck, Download, Sparkles, MapPin
 } from 'lucide-react';
 
 export default function AdminLayout() {
@@ -80,7 +80,7 @@ export default function AdminLayout() {
         { name: 'Homepage & Content', path: '/admin/content', icon: Image },
         { name: 'Banners', path: '/admin/banners', icon: Image },
         { name: 'About Us Editor', path: '/admin/about-us', icon: Globe },
-        { name: 'Contact Messages', path: '/admin/contact-messages', icon: Users }
+        { name: 'Contact Info & Locations', path: '/admin/contact-locations', icon: MapPin }
       ]
     },
     {

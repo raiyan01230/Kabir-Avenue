@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { Save, Image as ImageIcon, CheckCircle2, Plus, Trash2 } from 'lucide-react';
-import ProductImageUploader from '../../components/admin/ProductImageUploader';
+import ProductImageUploader from '@/components/admin/ProductImageUploader';
 
 export default function AdminAboutUs() {
   const [content, setContent] = useState<any>({

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, MessageSquare, Globe, ShieldCheck } from 'lucide-react';
-import { getStoreSettings, subscribeToStoreUpdates } from '../lib/queries';
-import { useSEO } from '../hooks/useSEO';
+import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, MessageSquare, Globe, ShieldCheck, Building2 } from 'lucide-react';
+import { getStoreSettings, subscribeToStoreUpdates } from '@/lib/queries';
+import { useSEO } from '@/hooks/useSEO';
 
 export default function ContactUs() {
   const [settings, setSettings] = useState<Record<string, string>>({});
+  const [locations, setLocations] = useState<any[]>([]);
   const [formData, setFormData] = useState({
     name: '',
     email: '',
@@ -18,18 +19,22 @@ export default function ContactUs() {
 
   const { settings: seoSettings } = useSEO();
 
-  const loadSettings = async () => {
+  const loadData = async () => {
     try {
-      const st = await getStoreSettings();
+      const [st, locRes] = await Promise.all([
+        getStoreSettings(),
+        fetch('/api/contact-locations').then(r => r.json()).catch(() => [])
+      ]);
       setSettings(st);
+      setLocations(Array.isArray(locRes) ? locRes : []);
     } catch {
       // ignore
     }
   };
 
   useEffect(() => {
-    loadSettings();
-    const unsub = subscribeToStoreUpdates(loadSettings);
+    loadData();
+    const unsub = subscribeToStoreUpdates(loadData);
     return () => unsub();
   }, []);
 
@@ -59,9 +64,6 @@ export default function ContactUs() {
   const storeName = settings['store_name'] || 'SHM Gadget Zone';
   const supportEmail = settings['contact_email'] || 'support@shmgadgetzone.bd';
   const hotline = settings['contact_phone'] || '+880 1700-000000';
-  const whatsapp = settings['whatsapp_url'] || '+880 1700-000000';
-  const address = settings['contact_address'] || 'Level 4, Tech Plaza, Agargaon, Dhaka-1207';
-  const warehouse = settings['warehouse_address'] || 'Warehouse Hub, Tejgaon Industrial Area, Dhaka';
   const hours = settings['business_hours'] || 'Saturday – Thursday: 10:00 AM – 8:00 PM';
 
   return (
@@ -80,68 +82,51 @@ export default function ContactUs() {
           </p>
         </div>
 
-        {/* Contact Info Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <Phone className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase">Official Hotline & WhatsApp</h3>
-              <p className="text-xs text-slate-600 mt-1">{hotline}</p>
-              {whatsapp && <p className="text-xs text-emerald-600 font-semibold mt-0.5">WhatsApp Ready</p>}
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <Mail className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase">Support Email</h3>
-              <p className="text-xs text-slate-600 mt-1">{supportEmail}</p>
-              <p className="text-xs text-slate-400 mt-0.5">Replies within 2 business hours</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-4">
-            <div className="w-12 h-12 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
-              <Clock className="w-6 h-6" />
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-slate-900 uppercase">Business Hours</h3>
-              <p className="text-xs text-slate-600 mt-1">{hours}</p>
-              <p className="text-xs text-rose-500 font-semibold mt-0.5">Friday: Closed</p>
-            </div>
-          </div>
-        </div>
-
-        {/* Addresses Section */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-              <MapPin className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Head Office & Showroom</h4>
-              <p className="text-sm text-slate-700">{address}</p>
-              <p className="text-xs text-slate-500">Visit our experience center to test premium audio and tech gear.</p>
-            </div>
-          </div>
-
-          <div className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 flex items-start gap-4">
-            <div className="w-10 h-10 rounded-xl bg-slate-100 text-slate-700 flex items-center justify-center shrink-0">
-              <ShieldCheck className="w-5 h-5" />
-            </div>
-            <div className="space-y-1">
-              <h4 className="text-xs font-bold text-slate-900 uppercase tracking-wide">Central Warehouse Hub</h4>
-              <p className="text-sm text-slate-700">{warehouse}</p>
-              <p className="text-xs text-slate-500">Dispatch center for all Inside & Outside Dhaka express deliveries.</p>
-            </div>
+        {/* Dynamic Contact Locations Grid */}
+        <div className="space-y-4">
+          <h2 className="text-lg font-extrabold text-slate-900">Official Store Locations &amp; Branches</h2>
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {locations.map((loc) => (
+              <div key={loc.id} className="bg-white p-6 rounded-2xl shadow-xs border border-slate-200 space-y-4 flex flex-col justify-between">
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <span className="text-[10px] font-bold uppercase tracking-wider px-2.5 py-1 bg-emerald-50 text-emerald-700 rounded-lg">
+                      {loc.type || 'Branch'}
+                    </span>
+                    <Building2 className="w-5 h-5 text-emerald-600" />
+                  </div>
+                  <h3 className="text-sm font-extrabold text-slate-900">{loc.title}</h3>
+                  <div className="space-y-2 text-xs text-slate-600">
+                    <div className="flex items-start gap-2">
+                      <MapPin className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                      <span>{loc.address}</span>
+                    </div>
+                    {loc.phone && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <a href={`tel:${loc.phone}`} className="hover:text-emerald-700 font-semibold">{loc.phone}</a>
+                      </div>
+                    )}
+                    {loc.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <a href={`mailto:${loc.email}`} className="hover:text-emerald-700">{loc.email}</a>
+                      </div>
+                    )}
+                    {loc.hours && (
+                      <div className="flex items-center gap-2">
+                        <Clock className="w-4 h-4 text-emerald-600 shrink-0" />
+                        <span>{loc.hours}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+            ))}
           </div>
         </div>
 
-        {/* Contact Form & Map / Additional Info */}
+        {/* Contact Form & Support Details */}
         <div className="bg-white rounded-2xl shadow-sm border border-slate-200 overflow-hidden grid grid-cols-1 lg:grid-cols-12">
           <div className="lg:col-span-7 p-8 sm:p-10 space-y-6">
             <div>

@@ -47,7 +47,7 @@ import AdminSecurity from './pages/admin/AdminSecurity';
 import AdminData from './pages/admin/AdminData';
 import AdminVIPOrderCreate from './pages/admin/AdminVIPOrderCreate';
 import AdminOrderPrintPage from './pages/admin/AdminOrderPrintPage';
-import AdminContactMessages from './pages/admin/AdminContactMessages';
+import AdminContactLocations from './pages/admin/AdminContactLocations';
 import AdminAboutUs from './pages/admin/AdminAboutUs';
 import AdminUsers from './pages/admin/AdminUsers';
 
@@ -150,7 +150,7 @@ function StoreApp() {
             <Route path="security" element={<AdminSecurity />} />
             <Route path="data" element={<AdminData />} />
             <Route path="activity" element={<AdminActivity />} />
-            <Route path="contact-messages" element={<AdminContactMessages />} />
+            <Route path="contact-locations" element={<AdminContactLocations />} />
             <Route path="about-us" element={<AdminAboutUs />} />
             <Route path="users" element={<AdminUsers />} />
             <Route path="system-health" element={<AdminSystemHealth />} />
