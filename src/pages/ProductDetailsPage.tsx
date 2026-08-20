@@ -73,7 +73,7 @@ export default function ProductDetailsPage() {
           const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
           let query = supabase
             .from('products')
-            .select('*, categories(*), product_images(*)');
+            .select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)');
 
           if (isUuid) {
             query = query.or(`slug.eq.${slug},id.eq.${slug}`);
