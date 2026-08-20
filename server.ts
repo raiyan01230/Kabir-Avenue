@@ -2017,7 +2017,11 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { id } = req.params;
-    await (db.from('promo_codes') as any).delete().eq('id', id);
+    try {
+      await (db.from('orders') as any).update({ promo_code_id: null }).eq('promo_code_id', id);
+    } catch {}
+    const { error } = await (db.from('promo_codes') as any).delete().eq('id', id);
+    if (error) return res.status(400).json({ error: error.message });
     res.json({ success: true });
   });
 

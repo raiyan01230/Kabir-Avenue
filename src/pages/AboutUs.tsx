@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ShieldCheck, Award, Truck, Users, CheckCircle2, ArrowRight, Sparkles, HeartHandshake } from 'lucide-react';
-import { getStoreSettings, subscribeToStoreUpdates } from '@/lib/queries';
+import { getStoreSettings, subscribeToStoreUpdates } from '../lib/queries';
 import { Link } from 'react-router-dom';
 
 export default function AboutUs() {

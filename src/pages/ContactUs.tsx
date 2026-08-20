@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Mail, Phone, MapPin, Clock, Send, CheckCircle2, MessageSquare, Globe, ShieldCheck, Building2 } from 'lucide-react';
-import { getStoreSettings, subscribeToStoreUpdates } from '@/lib/queries';
-import { useSEO } from '@/hooks/useSEO';
+import { getStoreSettings, subscribeToStoreUpdates } from '../lib/queries';
+import { useSEO } from '../hooks/useSEO';
 
 export default function ContactUs() {
   const [settings, setSettings] = useState<Record<string, string>>({});

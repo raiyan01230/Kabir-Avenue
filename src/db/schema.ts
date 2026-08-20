@@ -137,7 +137,7 @@ export const orders = pgTable('orders', {
   subtotal: numeric('subtotal', { precision: 12, scale: 2 }).notNull(),
   shippingFee: numeric('shipping_fee', { precision: 12, scale: 2 }).notNull(),
   tax: numeric('tax', { precision: 12, scale: 2 }).default('0.00'),
-  promoCodeId: uuid('promo_code_id').references(() => promoCodes.id),
+  promoCodeId: uuid('promo_code_id').references(() => promoCodes.id, { onDelete: 'set null' }),
   promoCode: text('promo_code'),
   discountType: text('discount_type'),
   discountValue: numeric('discount_value', { precision: 12, scale: 2 }),
