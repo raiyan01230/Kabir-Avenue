@@ -446,7 +446,7 @@ export default function ProductDetailsPage() {
           )}
 
           {/* Variant Selector */}
-            {product.has_variants && product.product_attributes && product.product_variants && product.product_variants.length > 0 && (
+            {(product.product_attributes && product.product_variants && product.product_variants.length > 0) && (
               <div className="pt-4 border-t border-slate-200">
                 <VariantProvider><ProductVariantSelector 
                   attributes={product.product_attributes} 
