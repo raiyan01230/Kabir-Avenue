@@ -83,11 +83,16 @@ export default function ProductDetailsPage() {
 
           const { data, error } = await query.maybeSingle();
 
-          if (error) throw error;
+          if (error) {
+            console.error('Direct Supabase fetch error:', error);
+            throw error;
+          }
+          console.log('Direct Supabase fetch data:', data);
           prodData = data;
         }
 
         if (prodData) {
+          console.log('Product data loaded:', prodData);
           setProduct(prodData);
           const images = resolveProductImages(prodData, prodData.product_images);
           setGalleryImages(images);
