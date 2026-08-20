@@ -221,6 +221,7 @@ export async function sendOrderConfirmation(orderData: any, customerEmail: strin
       items: items.map((item: any) => ({
         productId: item.product_id || '',
         name: item.product?.name || item.name || item.product_name_snapshot || 'Product Item',
+        variant: item.variant || (item.variant_info_snapshot ? Object.entries(item.variant_info_snapshot.attributes || {}).map(([k,v]) => `${k}: ${v}`).join(', ') : null),
         quantity: item.quantity || 1,
         unitPrice: Number(item.unitPrice || item.price || 0),
         lineTotal: Number(item.unitPrice || item.price || 0) * (item.quantity || 1)

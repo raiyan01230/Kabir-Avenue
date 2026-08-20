@@ -382,6 +382,8 @@ async function startServer() {
             return {
               order_id: order.id,
               product_id: item.productId || item.product_id || p.id || null,
+              variant_id: item.variantId || item.variant_id || null,
+              variant_info_snapshot: item.variantSnapshot || item.variant_info_snapshot || null,
               product_name_snapshot: p.name || item.productName || item.name || 'Product Item',
               product_image_snapshot: resolvedImg,
               unit_price: item.unitPrice,
@@ -390,7 +392,33 @@ async function startServer() {
             };
           });
           const { error: itemsError } = await (db.from('order_items') as any).insert(orderItemsData);
-          if (itemsError) console.warn('Item insert warning:', itemsError);
+          if (itemsError) {
+             console.warn('Item insert warning:', itemsError);
+          } else {
+             // Deduct Stock
+             for (const item of items) {
+                const pId = item.productId || item.product_id || item.product?.id;
+                const vId = item.variantId || item.variant_id;
+                const qty = item.quantity || 1;
+                if (pId) {
+                  // Try to deduct from base product stock
+                  try {
+                     const { data: prodData } = await (db.from('products') as any).select('stock_quantity').eq('id', pId).single();
+                     if (prodData) {
+                        await (db.from('products') as any).update({ stock_quantity: Math.max(0, (prodData.stock_quantity || 0) - qty) }).eq('id', pId);
+                     }
+                  } catch (e) {}
+                }
+                if (vId) {
+                  try {
+                     const { data: varData } = await (db.from('product_variants') as any).select('stock_quantity').eq('id', vId).single();
+                     if (varData) {
+                        await (db.from('product_variants') as any).update({ stock_quantity: Math.max(0, (varData.stock_quantity || 0) - qty) }).eq('id', vId);
+                     }
+                  } catch (e) {}
+                }
+             }
+          }
         }
 
         // 3. Insert Shipping Address
@@ -685,7 +713,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
   app.get("/api/admin/products", async (req, res) => {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
-    const { data, error } = await (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false });
+    const { data, error } = await (db.from('products') as any).select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)').order('created_at', { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
     res.json(data);
   });
@@ -693,7 +721,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
   app.post("/api/admin/products", async (req, res) => {
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
-    let { name, slug, sku, short_description, description, price, compare_price, discount_percentage, stock_quantity, status, featured, category_id, images, admin_email } = req.body;
+    let { name, slug, sku, short_description, description, price, compare_price, discount_percentage, stock_quantity, status, featured, category_id, images, admin_email, has_variants, attributes, variants } = req.body;
     
     if (!name || !price) {
       return res.status(400).json({ error: 'Product name and price are required' });
@@ -727,12 +755,45 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       stock_quantity: parseInt(stock_quantity, 10) || 0,
       status: finalStatus,
       featured: Boolean(featured),
-      category_id: category_id || null
+      category_id: category_id || null,
+      has_variants: Boolean(has_variants)
     }).select('*').single();
 
     if (error || !prod) {
       console.error('Failed to insert product:', error);
       return res.status(400).json({ error: error?.message || 'Failed to create product' });
+    }
+
+    
+    if (has_variants && Array.isArray(attributes) && Array.isArray(variants)) {
+      for (const attr of attributes) {
+        const { data: attrData } = await (db.from('product_attributes') as any).insert({
+          product_id: prod.id,
+          name: attr.name,
+          position: attr.position || 0
+        }).select().single();
+        if (attrData && Array.isArray(attr.values)) {
+          for (const val of attr.values) {
+            await (db.from('product_attribute_values') as any).insert({
+              attribute_id: attrData.id,
+              value: val.value,
+              position: val.position || 0
+            });
+          }
+        }
+      }
+      for (const v of variants) {
+        await (db.from('product_variants') as any).insert({
+          product_id: prod.id,
+          sku: v.sku || `${sku}-${Date.now().toString().slice(-4)}`,
+          price: v.price ? parseFloat(v.price) : null,
+          compare_price: v.comparePrice ? parseFloat(v.comparePrice) : null,
+          stock_quantity: parseInt(v.stockQuantity, 10) || 0,
+          image_url: v.imageUrl || null,
+          is_active: v.isActive !== false,
+          attributes: v.attributes || {}
+        });
+      }
     }
 
     if (images && Array.isArray(images) && images.length > 0) {
@@ -762,7 +823,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
 
     // Fetch full newly created record with joined relations
     const { data: fullProduct } = await (db.from('products') as any)
-      .select('*, categories(*), product_images(*)')
+      .select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)')
       .eq('id', prod.id)
       .single();
 
@@ -774,7 +835,9 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     const db = getSupabaseAdmin();
     if (!db) return res.status(500).json({ error: 'DB error' });
     const { id } = req.params;
-    const { admin_email, images, ...updates } = req.body;
+    const { admin_email, images, attributes, variants, ...updates } = req.body;
+    if (updates.has_variants !== undefined) updates.has_variants = Boolean(updates.has_variants);
+
 
     const { data: oldProd } = await (db.from('products') as any).select('*').eq('id', id).single();
 
@@ -832,7 +895,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
     }
 
     const { data: fullProduct } = await (db.from('products') as any)
-      .select('*, categories(*), product_images(*)')
+      .select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)')
       .eq('id', id)
       .single();
 
@@ -2208,7 +2271,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       const db = getSupabaseAdmin();
       if (!db) return res.json([]);
       const { data, error } = await (db.from('products') as any)
-        .select('*, categories(*), product_images(*)')
+        .select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)')
         .order('created_at', { ascending: false });
       if (error) throw error;
       res.json(data || []);
@@ -2223,7 +2286,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       if (!db) return res.status(404).json({ error: 'Not found' });
       const { slug } = req.params;
       const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(slug);
-      let query = (db.from('products') as any).select('*, categories(*), product_images(*)');
+      let query = (db.from('products') as any).select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)');
       if (isUuid) {
         query = query.or(`slug.eq.${slug},id.eq.${slug}`);
       } else {
@@ -2530,7 +2593,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
 
         if (db) {
           const [pRes, sRes] = await Promise.all([
-            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('products') as any).select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)').order('created_at', { ascending: false }),
             (db.from('store_settings') as any).select('*')
           ]);
           products = pRes.data || [];
@@ -2586,7 +2649,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
 
         if (db) {
           const [pRes, sRes] = await Promise.all([
-            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('products') as any).select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)').order('created_at', { ascending: false }),
             (db.from('store_settings') as any).select('*')
           ]);
           products = pRes.data || [];
@@ -2695,7 +2758,7 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
 
         if (db) {
           const [pRes, cRes, sRes] = await Promise.all([
-            (db.from('products') as any).select('*, categories(*), product_images(*)').order('created_at', { ascending: false }),
+            (db.from('products') as any).select('*, categories(*), product_images(*), product_attributes(*, product_attribute_values(*)), product_variants(*)').order('created_at', { ascending: false }),
             (db.from('categories') as any).select('*').order('name'),
             (db.from('store_settings') as any).select('*')
           ]);
@@ -3478,6 +3541,250 @@ Ensure the output is 100% valid JSON without markdown wrapping or commentary.`;
       renderHtmlWithSEO(req, res);
     });
   }
+
+  
+// Product Presets API
+app.get('/api/store/presets', async (req, res) => {
+  try {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+    const { data, error } = await db.from('product_presets').select('*').order('name');
+    if (error) throw error;
+    res.json(data || []);
+  } catch (error: any) {
+    console.error('Error fetching presets:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/store/presets', async (req, res) => {
+  try {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+    const { name, description, attributes } = req.body;
+    const { data, error } = await db.from('product_presets').insert([{
+      name, description, attributes
+    }] as any).select().single();
+    if (error) throw error;
+    res.json(data);
+  } catch (error: any) {
+    console.error('Error creating preset:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/store/presets/:id', async (req, res) => {
+  try {
+    const db = getSupabaseAdmin();
+    if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+    const { error } = await db.from('product_presets').delete().eq('id', req.params.id);
+    if (error) throw error;
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error('Error deleting preset:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+  // --- CONTACT MESSAGES API ---
+  app.get('/api/contact-messages', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json([]);
+      const { data, error } = await (db.from('contact_messages') as any).select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/contact-messages', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { name, email, phone, subject, message } = req.body;
+      if (!name || !email || !subject || !message) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      const { data, error } = await (db.from('contact_messages') as any).insert([{
+        name, email, phone, subject, message, status: 'unread'
+      }]).select().single();
+      if (error) throw error;
+      res.json({ success: true, message: data });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/contact-messages/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { status } = req.body;
+      const { data, error } = await (db.from('contact_messages') as any)
+        .update({ status })
+        .eq('id', req.params.id)
+        .select()
+        .single();
+      if (error) throw error;
+      res.json({ success: true, message: data });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/contact-messages/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { error } = await (db.from('contact_messages') as any).delete().eq('id', req.params.id);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- ABOUT US API ---
+  app.get('/api/about-us', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json({});
+      const { data } = await (db.from('store_settings') as any)
+        .select('setting_value')
+        .eq('setting_key', 'about_us_content')
+        .maybeSingle();
+      if (data?.setting_value) {
+        try {
+          return res.json(JSON.parse(data.setting_value));
+        } catch {
+          // fallback
+        }
+      }
+      // Default About Us structure
+      res.json({
+        pageTitle: "About Us",
+        subtitle: "Building Bangladesh's Premier Next-Gen E-Commerce Experience",
+        mainDescription: "Welcome to our store, where technology meets uncompromising quality. We pride ourselves on delivering authentic products with world-class customer service across Bangladesh.",
+        ourStory: "Founded with a passion for excellence, we started as a small team dedicated to bringing genuine, high-performance electronics and lifestyle products directly to doorstep buyers in Dhaka and beyond.",
+        mission: "To empower every Bangladeshi household and professional with cutting-edge gear, unbeatable prices, and lightning-fast nationwide delivery.",
+        vision: "To become the most trusted and customer-centric e-commerce brand in South Asia.",
+        whyChooseUs: [
+          "100% Authentic Products with Official Warranty",
+          "Lightning Fast Delivery Inside & Outside Dhaka",
+          "Dedicated 24/7 Customer Support Hotline",
+          "Secure & Flexible Payment Options"
+        ],
+        customerCommitment: "Your satisfaction is our ultimate benchmark. Every order is meticulously packaged and inspected before dispatch.",
+        callToAction: "Ready to upgrade your daily lifestyle?",
+        buttonText: "Explore Shop Now",
+        buttonLink: "/shop",
+        imageUrl: "https://images.unsplash.com/photo-1556742049-0a67d553c24d?auto=format&fit=crop&q=80&w=1200",
+        enabledSections: {
+          story: true,
+          missionVision: true,
+          whyChooseUs: true,
+          commitment: true,
+          cta: true
+        }
+      });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.put('/api/about-us', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const content = req.body;
+      const { error } = await (db.from('store_settings') as any).upsert({
+        setting_key: 'about_us_content',
+        setting_value: JSON.stringify(content),
+        description: 'Dynamic About Us Page Content',
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'setting_key' });
+      if (error) throw error;
+      res.json({ success: true, content });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // --- ADMIN USERS / STAFF MANAGEMENT API ---
+  app.get('/api/admin/users', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.json([]);
+      const { data, error } = await (db.from('admin_users') as any).select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      res.json(data || []);
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.post('/api/admin/users', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { email, password, fullName, role, permissions } = req.body;
+      if (!email || !password || !fullName) {
+        return res.status(400).json({ error: 'Missing required fields' });
+      }
+      const { data, error } = await (db.from('admin_users') as any).insert([{
+        email,
+        password_hash: password, // in production hash or store securely
+        full_name: fullName,
+        role: role || 'staff',
+        permissions: permissions || {},
+        is_active: true
+      }]).select().single();
+      if (error) throw error;
+      res.json({ success: true, user: data });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.patch('/api/admin/users/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { fullName, role, isActive, permissions, password } = req.body;
+      const updateData: any = {};
+      if (fullName !== undefined) updateData.full_name = fullName;
+      if (role !== undefined) updateData.role = role;
+      if (isActive !== undefined) updateData.is_active = isActive;
+      if (permissions !== undefined) updateData.permissions = permissions;
+      if (password !== undefined && password.trim() !== '') updateData.password_hash = password;
+
+      const { data, error } = await (db.from('admin_users') as any)
+        .update(updateData)
+        .eq('id', req.params.id)
+        .select()
+        .single();
+      if (error) throw error;
+      res.json({ success: true, user: data });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  app.delete('/api/admin/users/:id', async (req, res) => {
+    try {
+      const db = getSupabaseAdmin();
+      if (!db) return res.status(500).json({ error: 'Supabase DB not configured' });
+      const { error } = await (db.from('admin_users') as any).delete().eq('id', req.params.id);
+      if (error) throw error;
+      res.json({ success: true });
+    } catch (err: any) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
 
   app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server running on http://localhost:${PORT}`);

@@ -93,6 +93,8 @@ export default function Footer() {
             <li><Link to="/orders" className="hover:text-white transition">Order History</Link></li>
             <li><Link to="/wishlist" className="hover:text-white transition">Saved Wishlist</Link></li>
             <li><Link to="/cart" className="hover:text-white transition">Shopping Cart</Link></li>
+            <li><Link to="/about-us" className="hover:text-white transition font-bold text-emerald-400">About Us</Link></li>
+            <li><Link to="/contact-us" className="hover:text-white transition font-bold text-emerald-400">Contact Us</Link></li>
           </ul>
         </div>
 

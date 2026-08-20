@@ -246,6 +246,8 @@ export default function Checkout() {
             quantity: item.quantity || 1,
             unitPrice: item.price,
             variant: item.variant || null,
+            variantId: item.variantId || null,
+            variantSnapshot: item.variantSnapshot || null,
             product: {
               name: item.name || 'Product Item',
               imageUrl: item.imageUrl || null,

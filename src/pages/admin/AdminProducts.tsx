@@ -1,3 +1,5 @@
+import AdminProductVariantsEditor from '../../components/admin/AdminProductVariantsEditor';
+import { ProductAttribute, ProductVariant } from '../../lib/queries';
 import React, { useEffect, useState } from 'react';
 import { 
   Plus, 
@@ -52,6 +54,9 @@ export default function AdminProducts() {
   const [featured, setFeatured] = useState(false);
   const [shortDescription, setShortDescription] = useState('');
   const [description, setDescription] = useState('');
+  const [hasVariants, setHasVariants] = useState(false);
+  const [attributes, setAttributes] = useState<ProductAttribute[]>([]);
+  const [variants, setVariants] = useState<ProductVariant[]>([]);
   const [productImages, setProductImages] = useState<ProductImageItem[]>([]);
 
   // AI & Google SEO State
@@ -65,7 +70,7 @@ export default function AdminProducts() {
   const [googleSearchSummary, setGoogleSearchSummary] = useState<string | null>(null);
   const [aiSuccessSummary, setAiSuccessSummary] = useState<string | null>(null);
   const [copiedSeo, setCopiedSeo] = useState(false);
-  const [activeTab, setActiveTab] = useState<'details' | 'seo'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'seo' | 'variants'>('details');
 
   const admin_email = JSON.parse(localStorage.getItem('admin_session') || '{}').email || 'admin@store.bd';
 
@@ -209,6 +214,9 @@ export default function AdminProducts() {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+        has_variants: hasVariants,
+        attributes,
+        variants,
           imageBase64: targetBase64,
           imageUrl: targetUrl,
           nameHint: name.trim() || undefined,
@@ -340,6 +348,9 @@ export default function AdminProducts() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
+        has_variants: hasVariants,
+        attributes,
+        variants,
           status: newStatus,
           admin_email
         })
@@ -385,6 +396,9 @@ export default function AdminProducts() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
+        has_variants: hasVariants,
+        attributes,
+        variants,
             name: newCategoryName.trim(),
             slug: newCategoryName.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, ''),
             admin_email
@@ -462,7 +476,10 @@ export default function AdminProducts() {
       const res = await fetch(`/api/admin/products/${id}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ admin_email })
+        body: JSON.stringify({
+        has_variants: hasVariants,
+        attributes,
+        variants, admin_email })
       });
       const data = await res.json();
       if (res.ok) {
@@ -687,6 +704,19 @@ export default function AdminProducts() {
                 </button>
                 <button
                   type="button"
+                  onClick={() => setActiveTab('variants' as any)}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
+                    activeTab === 'variants' as any ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
+                  }`}
+                >
+                  <Tag className="w-3.5 h-3.5" />
+                  <span>Variants</span>
+                  {hasVariants && (
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 ml-1"></span>
+                  )}
+                </button>
+                <button
+                  type="button"
                   onClick={() => setActiveTab('seo')}
                   className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition flex items-center gap-1.5 ${
                     activeTab === 'seo' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-400 hover:text-white'
@@ -774,7 +804,22 @@ export default function AdminProducts() {
             <form onSubmit={handleSave} className="space-y-5">
               
               {/* TAB 1: PRODUCT DETAILS */}
-              {activeTab === 'details' && (
+              
+            {activeTab === 'variants' as any && (
+              <div className="p-6">
+                <AdminProductVariantsEditor
+                  hasVariants={hasVariants}
+                  setHasVariants={setHasVariants}
+                  attributes={attributes}
+                  setAttributes={setAttributes}
+                  variants={variants}
+                  setVariants={setVariants}
+                  productPrice={price}
+                  productSku={sku}
+                />
+              </div>
+            )}
+            {activeTab === 'details' && (
                 <div className="space-y-5">
                   {/* Advanced Multi-Image Uploader with AI Hook */}
                   <div className="p-4 bg-slate-950/70 border border-slate-800 rounded-2xl">
@@ -1115,10 +1160,10 @@ export default function AdminProducts() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    onClick={() => setActiveTab(activeTab === 'details' ? 'seo' : 'details')}
+                    onClick={() => setActiveTab(activeTab === 'details' ? 'variants' : activeTab === 'variants' ? 'seo' : 'details')}
                     className="text-xs text-emerald-400 hover:text-emerald-300 font-semibold flex items-center gap-1"
                   >
-                    <span>{activeTab === 'details' ? 'View Google SEO Preview →' : '← Back to Product Data'}</span>
+                    <span>{activeTab === 'details' ? 'Manage Variants →' : activeTab === 'variants' ? 'View Google SEO Preview →' : '← Back to Product Data'}</span>
                   </button>
                 </div>
 

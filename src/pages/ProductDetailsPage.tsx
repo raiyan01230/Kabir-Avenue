@@ -10,6 +10,9 @@ import { applySEOMetadata, injectStructuredData } from '../hooks/useSEO';
 import { getProductReviews, submitProductReview, ReviewItem } from '../lib/queries';
 import { Star, ShieldCheck, Truck, RefreshCw, Heart, ShoppingBag, Zap, CheckCircle2, AlertCircle, PackageCheck, Layers, ThumbsUp } from 'lucide-react';
 import ProductCard from '../components/ProductCard';
+import ProductVariantSelector from '../components/ProductVariantSelector';
+import { VariantProvider } from '../context/VariantContext';
+import { ProductVariant } from '../lib/queries';
 
 export default function ProductDetailsPage() {
   const { slug } = useParams<{ slug: string }>();
@@ -28,6 +31,7 @@ export default function ProductDetailsPage() {
   const [loading, setLoading] = useState(true);
   const [addingCart, setAddingCart] = useState(false);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
+  const [selectedVariant, setSelectedVariant] = useState<any | null>(null);
 
   // Review submission state
   const [reviewRating, setReviewRating] = useState(5);
@@ -211,9 +215,13 @@ export default function ProductDetailsPage() {
     );
   }
 
+  
+      const displayPrice = selectedVariant && selectedVariant.price !== null ? Number(selectedVariant.price) : Number(product.price);
+  const displayComparePrice = selectedVariant && selectedVariant.compare_price !== null ? Number(selectedVariant.compare_price) : Number(product.compare_price || 0);
+  const displayStock = selectedVariant ? Number(selectedVariant.stock_quantity) : Number(product.stock_quantity || 0);
+  const isOutOfStock = displayStock <= 0;
   const currentImage = galleryImages[selectedImgIdx] || galleryImages[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=800&auto=format&fit=crop&q=80';
   const inWishlist = isInWishlist(product.id);
-  const isOutOfStock = Number(product.stock_quantity || 0) <= 0;
 
   // Hover zoom handler
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
@@ -236,9 +244,13 @@ export default function ProductDetailsPage() {
       showToast('This product is currently out of stock', 'error');
       return;
     }
+    if (product.has_variants && !selectedVariant) {
+      showToast('Please select all options before proceeding.', 'error');
+      return;
+    }
     try {
       setAddingCart(true);
-      await addToCart(product, quantity);
+      await addToCart(product, quantity, selectedVariant);
       showToast(`Added ${quantity} × "${product.name}" to your cart!`);
     } catch (err) {
       console.error(err);
@@ -253,7 +265,11 @@ export default function ProductDetailsPage() {
       showToast('This product is currently out of stock', 'error');
       return;
     }
-    setBuyNow(product, quantity);
+    if (product.has_variants && !selectedVariant) {
+      showToast('Please select all options before proceeding.', 'error');
+      return;
+    }
+    setBuyNow(product, quantity, selectedVariant);
     navigate('/checkout?buyNow=1');
   };
 
@@ -384,7 +400,7 @@ export default function ProductDetailsPage() {
               {product.name}
             </h1>
             {product.sku && (
-              <p className="text-xs text-slate-400 font-mono mt-1">SKU: {product.sku}</p>
+              <p className="text-xs text-slate-400 font-mono mt-1">SKU: {selectedVariant ? selectedVariant.sku : product.sku}</p>
             )}
           </div>
 
@@ -405,10 +421,10 @@ export default function ProductDetailsPage() {
           {/* Price & Stock */}
           <div className="space-y-1">
             <div className="flex items-baseline gap-3">
-              <span className="text-3xl font-black text-slate-900">৳{Number(product.price).toLocaleString()}</span>
-              {product.compare_price && Number(product.compare_price) > Number(product.price) && (
+              <span className="text-3xl font-black text-slate-900">৳{displayPrice.toLocaleString()}</span>
+              {displayComparePrice && Number(displayComparePrice) > displayPrice && (
                 <span className="text-base font-medium text-slate-400 line-through">
-                  ৳{Number(product.compare_price).toLocaleString()}
+                  ৳{displayComparePrice.toLocaleString()}
                 </span>
               )}
             </div>
@@ -428,6 +444,17 @@ export default function ProductDetailsPage() {
               {product.short_description}
             </p>
           )}
+
+          {/* Variant Selector */}
+            {product.has_variants && product.product_attributes && product.product_variants && product.product_variants.length > 0 && (
+              <div className="pt-4 border-t border-slate-200">
+                <VariantProvider><ProductVariantSelector 
+                  attributes={product.product_attributes} 
+                  variants={product.product_variants} 
+                  onVariantSelected={setSelectedVariant}
+                /></VariantProvider>
+              </div>
+            )}
 
           {/* Quantity Selector */}
           {!isOutOfStock && (
@@ -658,7 +685,7 @@ export default function ProductDetailsPage() {
               View All Products &rarr;
             </Link>
           </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-6">
             {relatedProducts.map(p => (
               <ProductCard key={p.id} product={p} />
             ))}

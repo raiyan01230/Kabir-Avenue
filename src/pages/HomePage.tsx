@@ -191,7 +191,7 @@ export default function HomePage() {
 
       {/* 3. Bangladesh Service Guarantees */}
       <section className="container mx-auto px-4">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 sm:gap-6 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm">
           <div className="flex items-start gap-4">
             <div className="p-3 bg-slate-100 text-slate-900 rounded-xl">
               <Truck className="w-6 h-6" />
@@ -240,7 +240,7 @@ export default function HomePage() {
               <ArrowRight className="w-3.5 h-3.5 group-hover:translate-x-1 transition-transform" />
             </Link>
           </div>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4 sm:gap-3 sm:gap-6">
             {categories.map((cat, index) => (
               <Link
                 key={cat.id || cat.slug || index}
@@ -291,7 +291,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
             {discountDeals.map((product, index) => (
               <ProductCard
                 key={product.id || index}
@@ -324,7 +324,7 @@ export default function HomePage() {
             {error}
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
             {featuredProducts.map((product, index) => (
               <ProductCard
                 key={product.id || index}
@@ -358,7 +358,7 @@ export default function HomePage() {
             </Link>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-6">
             {newArrivals.map((product, index) => (
               <ProductCard
                 key={product.id || index}
@@ -379,7 +379,7 @@ export default function HomePage() {
 
           <div className="relative z-10 space-y-8">
             {/* Header & Trust Aggregate Summary */}
-            <div className="flex flex-col md:flex-row md:items-end justify-between gap-6 pb-6 border-b border-slate-800/80">
+            <div className="flex flex-col md:flex-row md:items-end justify-between gap-3 sm:gap-6 pb-6 border-b border-slate-800/80">
               <div className="space-y-2 max-w-2xl">
                 <div className="inline-flex items-center gap-2 px-3 py-1 bg-emerald-500/15 rounded-full text-xs font-bold text-emerald-400 border border-emerald-500/30">
                   <Award className="w-3.5 h-3.5" />

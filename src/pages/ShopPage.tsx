@@ -214,7 +214,7 @@ export default function ShopPage() {
       {/* Header Banner */}
       <div className="bg-slate-900 text-white py-12 px-4 border-b border-slate-800">
         <div className="container mx-auto max-w-7xl">
-          <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 sm:gap-6">
             <div>
               <div className="inline-flex items-center gap-2 text-xs font-semibold text-slate-400 mb-2 uppercase tracking-wider">
                 <Link to="/" className="hover:text-white transition">Home</Link>
@@ -466,7 +466,7 @@ export default function ShopPage() {
               </div>
             ) : viewMode === 'grid' ? (
               /* Grid View */
-              <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-6">
+              <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-6">
                 {products.map((product) => (
                   <ProductCard key={product.id} product={product} />
                 ))}
@@ -481,7 +481,7 @@ export default function ShopPage() {
                   return (
                     <div
                       key={product.id}
-                      className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-6"
+                      className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm hover:shadow-md transition flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 sm:gap-6"
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-2 mb-2">

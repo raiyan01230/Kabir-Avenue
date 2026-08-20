@@ -165,6 +165,12 @@ export default function Header() {
         <Link to="/track" className="hover:text-slate-900 transition text-emerald-700 font-bold whitespace-nowrap">
           Order Tracking
         </Link>
+        <Link to="/about-us" className="hover:text-slate-900 transition whitespace-nowrap">
+          About Us
+        </Link>
+        <Link to="/contact-us" className="hover:text-slate-900 transition whitespace-nowrap">
+          Contact Us
+        </Link>
       </nav>
 
       {/* Mobile Menu Dropdown */}

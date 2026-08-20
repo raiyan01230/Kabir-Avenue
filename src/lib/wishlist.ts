@@ -1,20 +1,29 @@
+export type WishlistItem = {
+  id: string;
+  wishlistId: string;
+  productId: string;
+  variantId?: string | null;
+  createdAt: Date;
+  product: {
+    id: string;
+    name: string;
+    slug: string;
+    price: string | number;
+    comparePrice?: string | number | null;
+    stockQuantity: number;
+    description?: string | null;
+    status: string;
+  };
+};
+
+
+
 import { supabase } from './supabase';
 import { wishlistItems } from '../db/schema';
 import { InferSelectModel } from 'drizzle-orm';
 import { ensureCustomerRecord } from './customer';
 
-export type WishlistItem = InferSelectModel<typeof wishlistItems> & {
-  product: {
-    id: string;
-    name: string;
-    slug: string;
-    price: string;
-    comparePrice?: string | null;
-    stockQuantity?: number;
-    description?: string | null;
-    status?: string;
-  };
-};
+
 
 export async function getWishlist(userIdOrCustomerId: string): Promise<{ wishlistId: string; items: WishlistItem[] }> {
   if (!userIdOrCustomerId) {

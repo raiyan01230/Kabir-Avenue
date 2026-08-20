@@ -1,9 +1,40 @@
-import { supabase } from './supabase';
-import { products, categories, homepageBanners, storeSettings, deliveryZones, productImages } from '../db/schema';
-import { InferSelectModel } from 'drizzle-orm';
+import {
+  products, categories, homepageBanners, storeSettings, deliveryZones, productVariants, productAttributes, productAttributeValues, productPresets
+} from '../db/schema';
+import { InferSelectModel, eq, desc } from 'drizzle-orm';
 import { getStorageImageUrl, resolveProductImages, ProductImageRecord } from './storage';
 
-export type Product = InferSelectModel<typeof products> & {
+
+export type ProductAttributeValue = {
+  id: string;
+  value: string;
+  position: number;
+};
+
+export type ProductAttribute = {
+  id: string;
+  name: string;
+  position: number;
+  product_attribute_values?: ProductAttributeValue[];
+};
+
+export type ProductVariant = {
+  id: string;
+  sku: string;
+  price: string | number | null;
+  compare_price: string | number | null;
+  stock_quantity: number;
+  image_url: string | null;
+  is_active: boolean;
+  attributes: Record<string, string>;
+};
+
+export type Product = Omit<InferSelectModel<typeof products>, 'hasVariants'> & {
+  hasVariants?: boolean;
+  has_variants?: boolean;
+  product_attributes?: ProductAttribute[];
+  product_variants?: ProductVariant[];
+
   category?: InferSelectModel<typeof categories>;
   categories?: InferSelectModel<typeof categories>;
   product_images?: ProductImageRecord[];
@@ -175,7 +206,7 @@ async function fetchAllProducts(): Promise<any[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (window as any).supabase
       .from('products')
       .select('*, categories(*), product_images(*)');
     if (!error && data && Array.isArray(data)) {
@@ -201,7 +232,7 @@ async function fetchAllCategories(): Promise<any[]> {
   }
 
   try {
-    const { data, error } = await supabase
+    const { data, error } = await (window as any).supabase
       .from('categories')
       .select('*');
     if (!error && data && Array.isArray(data)) {
@@ -796,3 +827,44 @@ export async function submitProductReview(payload: {
   }
 }
 
+
+
+export type ProductPreset = InferSelectModel<typeof productPresets>;
+export type PresetAttribute = { name: string; values: string[] };
+
+
+export async function getProductPresets(): Promise<ProductPreset[]> {
+  try {
+    const res = await fetch('/api/store/presets');
+    if (!res.ok) return [];
+    return await res.json();
+  } catch (error) {
+    console.error('Error fetching presets:', error);
+    return [];
+  }
+}
+
+export async function createProductPreset(name: string, description: string | null, attributes: PresetAttribute[]): Promise<ProductPreset | null> {
+  try {
+    const res = await fetch('/api/store/presets', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, description, attributes })
+    });
+    if (!res.ok) return null;
+    return await res.json();
+  } catch (error) {
+    console.error('Error creating preset:', error);
+    return null;
+  }
+}
+
+export async function deleteProductPreset(id: string): Promise<boolean> {
+  try {
+    const res = await fetch('/api/store/presets/' + id, { method: 'DELETE' });
+    return res.ok;
+  } catch (error) {
+    console.error('Error deleting preset:', error);
+    return false;
+  }
+}

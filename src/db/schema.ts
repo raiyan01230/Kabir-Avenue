@@ -6,6 +6,7 @@ import {
   integer,
   numeric,
   boolean,
+  jsonb,
   primaryKey,
 } from 'drizzle-orm/pg-core';
 
@@ -48,6 +49,7 @@ export const products = pgTable('products', {
   status: text('status').default('draft').notNull(), // draft, active, archived
   featured: boolean('featured').default(false),
   categoryId: uuid('category_id').references(() => categories.id),
+  hasVariants: boolean('has_variants').default(false),
   createdAt: timestamp('created_at').defaultNow().notNull(),
   updatedAt: timestamp('updated_at').defaultNow().notNull(),
 });
@@ -63,6 +65,35 @@ export const productImages = pgTable('product_images', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+
+export const productAttributes = pgTable('product_attributes', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
+  name: text('name').notNull(),
+  position: integer('position').default(0),
+});
+
+export const productAttributeValues = pgTable('product_attribute_values', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  attributeId: uuid('attribute_id').references(() => productAttributes.id, { onDelete: 'cascade' }).notNull(),
+  value: text('value').notNull(),
+  position: integer('position').default(0),
+});
+
+export const productVariants = pgTable('product_variants', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  productId: uuid('product_id').references(() => products.id, { onDelete: 'cascade' }).notNull(),
+  sku: text('sku').notNull(),
+  price: numeric('price', { precision: 12, scale: 2 }),
+  comparePrice: numeric('compare_price', { precision: 12, scale: 2 }),
+  stockQuantity: integer('stock_quantity').default(0).notNull(),
+  imageUrl: text('image_url'),
+  isActive: boolean('is_active').default(true).notNull(),
+  attributes: jsonb('attributes').notNull(),
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
 export const carts = pgTable('carts', {
   id: uuid('id').defaultRandom().primaryKey(),
   customerId: uuid('customer_id').references(() => customers.id),
@@ -74,6 +105,7 @@ export const cartItems = pgTable('cart_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   cartId: uuid('cart_id').references(() => carts.id, { onDelete: 'cascade' }).notNull(),
   productId: uuid('product_id').references(() => products.id).notNull(),
+  variantId: uuid('variant_id').references(() => productVariants.id, { onDelete: 'set null' }),
   quantity: integer('quantity').notNull(),
   unitPrice: numeric('unit_price', { precision: 12, scale: 2 }).notNull(),
   createdAt: timestamp('created_at').defaultNow().notNull(),
@@ -124,6 +156,8 @@ export const orderItems = pgTable('order_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   orderId: uuid('order_id').references(() => orders.id, { onDelete: 'cascade' }).notNull(),
   productId: uuid('product_id').references(() => products.id),
+  variantId: uuid('variant_id').references(() => productVariants.id, { onDelete: 'set null' }),
+  variantInfoSnapshot: jsonb('variant_info_snapshot'),
   productNameSnapshot: text('product_name_snapshot').notNull(),
   productImageSnapshot: text('product_image_snapshot'),
   unitPrice: numeric('unit_price', { precision: 12, scale: 2 }).notNull(),
@@ -160,6 +194,7 @@ export const orderStatusHistory = pgTable('order_status_history', {
 export const reviews = pgTable('reviews', {
   id: uuid('id').defaultRandom().primaryKey(),
   productId: uuid('product_id').references(() => products.id).notNull(),
+  variantId: uuid('variant_id').references(() => productVariants.id, { onDelete: 'set null' }),
   customerId: uuid('customer_id').references(() => customers.id).notNull(),
   orderId: uuid('order_id').references(() => orders.id).notNull(),
   rating: integer('rating').notNull(),
@@ -180,6 +215,7 @@ export const wishlistItems = pgTable('wishlist_items', {
   id: uuid('id').defaultRandom().primaryKey(),
   wishlistId: uuid('wishlist_id').references(() => wishlists.id, { onDelete: 'cascade' }).notNull(),
   productId: uuid('product_id').references(() => products.id).notNull(),
+  variantId: uuid('variant_id').references(() => productVariants.id, { onDelete: 'set null' }),
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
@@ -249,3 +285,23 @@ export const auditLogs = pgTable('audit_logs', {
   createdAt: timestamp('created_at').defaultNow().notNull(),
 });
 
+
+export const productPresets = pgTable('product_presets', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  description: text('description'),
+  attributes: jsonb('attributes').notNull().default([]), // array of { name: string, values: string[] }
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+  updatedAt: timestamp('updated_at').defaultNow().notNull(),
+});
+
+export const contactMessages = pgTable('contact_messages', {
+  id: uuid('id').defaultRandom().primaryKey(),
+  name: text('name').notNull(),
+  email: text('email').notNull(),
+  phone: text('phone'),
+  subject: text('subject').notNull(),
+  message: text('message').notNull(),
+  status: text('status').default('unread').notNull(), // unread, read, replied, closed
+  createdAt: timestamp('created_at').defaultNow().notNull(),
+});

@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Heart, ShoppingBag, Zap, Check } from 'lucide-react';
+import { Heart, ShoppingCart, Check, Percent } from 'lucide-react';
 import { Product } from '../lib/queries';
 import { resolveProductImages } from '../lib/storage';
 import { useWishlist } from '../context/WishlistContext';
@@ -22,10 +22,10 @@ export default function ProductCard({ product, onAddedToCart }: ProductCardProps
   const images = resolveProductImages(product, product.product_images);
   const primaryImg = images[0] || 'https://images.unsplash.com/photo-1523275335684-37898b6baf30?w=600&auto=format&fit=crop&q=80';
   const secondaryImg = images[1] || primaryImg;
+
   const inWishlist = isInWishlist(product.id);
   const stockQty = Number(product.stock_quantity ?? (product as any).stockQuantity ?? 0);
   const isOutOfStock = stockQty <= 0;
-  const categoryName = (product as any).categories?.name || (product as any).category?.name;
   const comparePrice = product.compare_price ?? (product as any).comparePrice;
 
   const handleWishlist = async (e: React.MouseEvent) => {
@@ -43,7 +43,7 @@ export default function ProductCard({ product, onAddedToCart }: ProductCardProps
     e.preventDefault();
     e.stopPropagation();
     if (isOutOfStock) return;
-
+    
     try {
       setLoadingAction(true);
       await addToCart(product, 1);
@@ -70,19 +70,25 @@ export default function ProductCard({ product, onAddedToCart }: ProductCardProps
   const productUrl = `/products/${product.slug || product.id}`;
 
   return (
-    <div className="group bg-white rounded-2xl border border-slate-200 shadow-xs hover:shadow-xl transition-all duration-300 flex flex-col justify-between overflow-hidden relative">
-      {/* Wishlist Button */}
+    <div className="group bg-white rounded-lg border border-slate-200 shadow-sm hover:shadow-md transition-all duration-300 flex flex-col justify-between overflow-hidden relative">
+      {/* Elite Choice Badge */}
+      <div className="absolute top-2 left-2 z-20 bg-[#e62e2d] text-white text-[9px] font-bold px-1.5 py-0.5 rounded-full flex items-center gap-0.5 shadow-sm">
+        <Percent className="w-2.5 h-2.5" />
+        <span>ELITE CHOICE</span>
+      </div>
+
+      {/* Wishlist Button (Kept but made subtle) */}
       <button
         type="button"
         onClick={handleWishlist}
-        className={`absolute top-3 right-3 z-20 p-2 rounded-full backdrop-blur-md transition-all shadow-xs ${
+        className={`absolute top-2 right-2 z-20 p-1.5 rounded-full backdrop-blur-md transition-all shadow-sm ${
           inWishlist
             ? 'bg-rose-500 text-white'
             : 'bg-white/80 text-slate-400 hover:text-rose-500 hover:bg-white'
         }`}
         title={inWishlist ? 'Remove from Wishlist' : 'Add to Wishlist'}
       >
-        <Heart className={`w-4 h-4 ${inWishlist ? 'fill-white' : ''}`} />
+        <Heart className={`w-3.5 h-3.5 ${inWishlist ? 'fill-white' : ''}`} />
       </button>
 
       {/* Product Image & Link */}
@@ -101,68 +107,58 @@ export default function ProductCard({ product, onAddedToCart }: ProductCardProps
             loading="lazy"
           />
         )}
-
         {/* Stock Badge */}
-        {isOutOfStock ? (
-          <span className="absolute bottom-3 left-3 bg-rose-600/90 backdrop-blur-xs text-white text-[10px] font-bold px-2.5 py-1 rounded-md shadow-xs">
+        {isOutOfStock && (
+          <span className="absolute bottom-2 left-2 bg-rose-600/90 backdrop-blur-xs text-white text-[10px] font-bold px-2 py-0.5 rounded shadow-sm">
             Out of Stock
           </span>
-        ) : (
-          categoryName && (
-            <span className="absolute bottom-3 left-3 bg-slate-900/80 backdrop-blur-xs text-white text-[10px] font-bold px-2.5 py-1 rounded-md shadow-xs">
-              {categoryName}
-            </span>
-          )
         )}
       </Link>
 
       {/* Product Info */}
-      <div className="p-4 flex flex-col flex-grow justify-between space-y-3">
+      <div className="p-2.5 sm:p-3 flex flex-col flex-grow justify-between space-y-2">
         <div className="space-y-1">
-          {product.sku && (
-            <p className="text-[10px] font-mono text-slate-400">SKU: {product.sku}</p>
-          )}
           <Link
             to={productUrl}
-            className="font-bold text-sm text-slate-900 line-clamp-2 hover:text-slate-700 transition leading-snug"
+            className="font-medium text-[11px] sm:text-xs text-slate-800 line-clamp-2 hover:text-slate-600 transition leading-snug"
           >
-            {product.name}
+            {product.sku ? `${product.sku} - ` : ''}{product.name}
           </Link>
         </div>
 
         {/* Price & Actions */}
-        <div className="pt-2 border-t border-slate-100 space-y-3">
-          <div className="flex items-baseline gap-2">
-            <span className="text-base font-black text-slate-900">
+        <div className="space-y-2.5">
+          <div className="flex items-baseline gap-1.5">
+            <span className="text-[13px] sm:text-sm font-bold text-black">
               ৳{Number(product.price).toLocaleString()}
             </span>
             {comparePrice && Number(comparePrice) > Number(product.price) && (
-              <span className="text-xs font-medium text-slate-400 line-through">
+              <span className="text-[10px] font-medium text-slate-400 line-through">
                 ৳{Number(comparePrice).toLocaleString()}
               </span>
             )}
           </div>
 
-          <div className="grid grid-cols-2 gap-2">
+          <div className="flex items-center gap-1.5">
             <button
               type="button"
               disabled={loadingAction || isOutOfStock}
               onClick={handleAddToCart}
-              className={`w-full py-2 px-2 border text-xs font-bold rounded-xl transition flex items-center justify-center gap-1.5 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
+              className={`flex-1 py-1.5 px-1 border text-[11px] font-bold rounded transition flex items-center justify-center gap-1 cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed ${
                 addedSuccess
                   ? 'bg-emerald-600 border-emerald-600 text-white'
-                  : 'border-slate-300 hover:border-slate-900 hover:bg-slate-50 text-slate-800'
+                  : 'border-slate-300 hover:border-slate-400 bg-white text-slate-800'
               }`}
             >
               {addedSuccess ? (
                 <>
-                  <Check className="w-3.5 h-3.5" />
+                  <Check className="w-3 h-3" />
                   <span>Added</span>
                 </>
               ) : (
                 <>
-                  <ShoppingBag className="w-3.5 h-3.5" />
-                  <span>Cart</span>
+                  <ShoppingCart className="w-3 h-3" />
+                  <span>Add</span>
                 </>
               )}
             </button>
@@ -170,10 +166,9 @@ export default function ProductCard({ product, onAddedToCart }: ProductCardProps
               type="button"
               disabled={isOutOfStock}
               onClick={handleBuyNow}
-              className="w-full py-2 px-2 bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold rounded-xl transition flex items-center justify-center gap-1 shadow-xs text-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex-1 py-1.5 px-1 bg-black hover:bg-slate-900 text-white text-[11px] font-bold rounded transition flex items-center justify-center text-center cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              <Zap className="w-3.5 h-3.5 text-amber-300 fill-amber-300" />
-              <span>Buy Now</span>
+              Buy Now
             </button>
           </div>
         </div>

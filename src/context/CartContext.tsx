@@ -17,6 +17,8 @@ export interface CartItemData {
   quantity: number;
   stockQuantity?: number;
   variant?: string | null;
+  variantId?: string | null;
+  variantSnapshot?: any;
 }
 
 export type CartItem = CartItemData;
@@ -27,12 +29,12 @@ interface CartContextType {
   uniqueCount: number;
   subtotal: number;
   isCartLoading: boolean;
-  addToCart: (product: Product | any, quantity?: number, variant?: string | null) => Promise<boolean>;
-  updateQuantity: (productId: string, quantity: number, variant?: string | null) => Promise<void>;
-  removeFromCart: (productId: string, variant?: string | null) => Promise<void>;
+  addToCart: (product: Product | any, quantity?: number, variant?: any | null) => Promise<boolean>;
+  updateQuantity: (productId: string, quantity: number, variantId?: string | null) => Promise<void>;
+  removeFromCart: (productId: string, variantId?: string | null) => Promise<void>;
   clearCart: () => Promise<void>;
   buyNowItem: CartItemData | null;
-  setBuyNow: (product: Product | any, quantity?: number, variant?: string | null) => CartItemData;
+  setBuyNow: (product: Product | any, quantity?: number, variant?: any | null) => CartItemData;
   clearBuyNow: () => void;
   getBuyNowItem: () => CartItemData | null;
   refreshCart: () => Promise<void>;

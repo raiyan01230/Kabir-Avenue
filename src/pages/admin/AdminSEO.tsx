@@ -292,17 +292,22 @@ export default function AdminSEO() {
 
     try {
       // Package all settings
-      const settingsPayload = {
+      const mergedMap = {
         ...settings,
         seo_pages_config: JSON.stringify(pagesConfig),
         seo_redirects: JSON.stringify(redirects)
       };
+      
+      const settingsArray = Object.keys(mergedMap).map(k => ({
+        settingKey: k,
+        settingValue: mergedMap[k]
+      }));
 
       const res = await fetch('/api/admin/settings', {
-        method: 'POST',
+        method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          settings: settingsPayload,
+          settings: settingsArray,
           admin_email
         })
       });

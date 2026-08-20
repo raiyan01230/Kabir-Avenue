@@ -14,6 +14,8 @@ import OrderSuccessPage from './pages/OrderSuccessPage';
 import ProductDetailsPage from './pages/ProductDetailsPage';
 import ShopPage from './pages/ShopPage';
 import AccountPage from './pages/AccountPage';
+import ContactUs from './pages/ContactUs';
+import AboutUs from './pages/AboutUs';
 import { AuthProvider } from './context/AuthContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { CartProvider } from './context/CartContext';
@@ -45,6 +47,9 @@ import AdminSecurity from './pages/admin/AdminSecurity';
 import AdminData from './pages/admin/AdminData';
 import AdminVIPOrderCreate from './pages/admin/AdminVIPOrderCreate';
 import AdminOrderPrintPage from './pages/admin/AdminOrderPrintPage';
+import AdminContactMessages from './pages/admin/AdminContactMessages';
+import AdminAboutUs from './pages/admin/AdminAboutUs';
+import AdminUsers from './pages/admin/AdminUsers';
 
 function StoreApp() {
   const [maintenanceMode, setMaintenanceMode] = useState(false);
@@ -112,6 +117,8 @@ function StoreApp() {
           <Route path="/products/:slug" element={<ProductDetailsPage />} />
           <Route path="/product/:slug" element={<ProductDetailsPage />} />
           <Route path="/wishlist" element={<WishlistPage />} />
+          <Route path="/contact-us" element={<ContactUs />} />
+          <Route path="/about-us" element={<AboutUs />} />
 
           {/* Admin Routes */}
           <Route path="/admin/login" element={<AdminLogin />} />
@@ -143,6 +150,9 @@ function StoreApp() {
             <Route path="security" element={<AdminSecurity />} />
             <Route path="data" element={<AdminData />} />
             <Route path="activity" element={<AdminActivity />} />
+            <Route path="contact-messages" element={<AdminContactMessages />} />
+            <Route path="about-us" element={<AdminAboutUs />} />
+            <Route path="users" element={<AdminUsers />} />
             <Route path="system-health" element={<AdminSystemHealth />} />
           </Route>
         </Routes>

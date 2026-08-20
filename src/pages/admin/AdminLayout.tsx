@@ -78,12 +78,15 @@ export default function AdminLayout() {
       items: [
         { name: 'Store Identity', path: '/admin/store', icon: Store },
         { name: 'Homepage & Content', path: '/admin/content', icon: Image },
-        { name: 'Banners', path: '/admin/banners', icon: Image }
+        { name: 'Banners', path: '/admin/banners', icon: Image },
+        { name: 'About Us Editor', path: '/admin/about-us', icon: Globe },
+        { name: 'Contact Messages', path: '/admin/contact-messages', icon: Users }
       ]
     },
     {
       title: 'CONTROL & OPS',
       items: [
+        { name: 'Staff & Admin Users', path: '/admin/users', icon: ShieldCheck },
         { name: 'Operations', path: '/admin/operations', icon: Activity },
         { name: 'Maintenance & Toggles', path: '/admin/maintenance', icon: ShieldAlert },
         { name: 'SEO Settings', path: '/admin/seo', icon: Globe }
